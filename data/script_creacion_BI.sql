@@ -1,4 +1,4 @@
-USE [GD1C2023]
+USE [GD1C2024]
 GO
 
 ------------- LIMPIAR FUNCIONES----------------------
@@ -17,6 +17,9 @@ IF EXISTS(SELECT [name] FROM sys.objects WHERE [name] = 'BI_CALCULAR_DIA_SEMANA'
 GO
 
 ------------- LIMPIAR TABLAS ------------------------
+
+IF EXISTS(SELECT [name] FROM sys.tables WHERE [name] = 'BI_Tickets')
+    DROP TABLE LOS_CRUD.BI_Tickets;
 
 IF EXISTS(SELECT [name] FROM sys.tables WHERE [name] = 'BI_TIEMPO')
     DROP TABLE LOS_CRUD.BI_TIEMPO;
@@ -45,8 +48,7 @@ IF EXISTS(SELECT [name] FROM sys.tables WHERE [name] = 'BI_CATEGORIA_PRODUCTO')
 IF EXISTS(SELECT [name] FROM sys.tables WHERE [name] = 'BI_SUBCATEGORIA_PRODUCTO')
     DROP TABLE LOS_CRUD.BI_SUBCATEGORIA_PRODUCTO;
 
-IF EXISTS(SELECT [name] FROM sys.tables WHERE [name] = 'BI_Tickets')
-    DROP TABLE LOS_CRUD.BI_Tickets;
+
 GO
 
 ------------------ LIMPIAR PROCEDURES ---------------------------
@@ -110,26 +112,30 @@ GO
 
 -- Calcular Ubicacion
 CREATE FUNCTION LOS_CRUD.BI_CALCULAR_UBICACION(@cod_localidad INT)
-	RETURNS NVARCHAR(100)
+    RETURNS NVARCHAR(100)
 BEGIN
-	DECLARE @PROVINCIA NVARCHAR(100)
+    DECLARE @PROVINCIA NVARCHAR(100)
     DECLARE @LOCALIDAD NVARCHAR(100)
-	DECLARE @UBICACION NVARCHAR(100)
+    DECLARE @UBICACION NVARCHAR(100)
 
-	SET @PROVINCIA = 
-                    SELECT TOP 1 p.nombre_provincia
-                    FROM LOS_CRUD.Localidad l
-                    JOIN LOS_CRUD.Provincia p ON p.cod_provincia = l.cod_provincia
-                    WHERE l.cod_localidad = @cod_localidad
-    SET @LOCALIDAD = 
-                    SELECT TOP 1 l.nombre_localidad
-                    FROM LOS_CRUD.Localidad l
-                    WHERE l.cod_localidad = @cod_localidad
-    
+    -- Asignar el nombre de la provincia a la variable @PROVINCIA
+    SELECT @PROVINCIA = p.nombre_provincia
+    FROM LOS_CRUD.Localidad l
+    JOIN LOS_CRUD.Provincia p ON p.cod_provincia = l.cod_provincia
+    WHERE l.cod_localidad = @cod_localidad
+
+    -- Asignar el nombre de la localidad a la variable @LOCALIDAD
+    SELECT @LOCALIDAD = l.nombre_localidad
+    FROM LOS_CRUD.Localidad l
+    WHERE l.cod_localidad = @cod_localidad
+
+    -- Concatenar localidad y provincia en la variable @UBICACION
     SET @UBICACION = @LOCALIDAD + ', ' + @PROVINCIA
 
+    RETURN @UBICACION
 END
 GO
+
 
 --Rango turnos
 CREATE FUNCTION LOS_CRUD.BI_CALCULAR_RANGO_TURNOS(@FECHA_HORA DATETIME2(3))
@@ -227,7 +233,7 @@ CREATE PROCEDURE LOS_CRUD.MIGRAR_BI_TIEMPO
  AS
   BEGIN
     INSERT INTO LOS_CRUD.BI_TIEMPO (tiempo_anio,tiempo_cuatrimestre,tiempo_mes)
-		SELECT DISTINCT YEAR(fecha_ticket),DATEPART(QUARTER, t.fecha_hora_ticket), MONTH(fecha_ticket)
+		SELECT DISTINCT YEAR(fecha_hora_ticket),DATEPART(QUARTER, fecha_hora_ticket), MONTH(fecha_hora_ticket)
 		FROM LOS_CRUD.TICKET
   END
 GO
@@ -245,6 +251,8 @@ INSERT INTO LOS_CRUD.BI_RANGO_TURNOS(cod_rango_turnos,desc_rango_turnos)
 END
 GO
 
+
+/*
 -- Sucursal
 CREATE PROCEDURE LOS_CRUD.MIGRAR_BI_SUCURSAL
  AS
@@ -253,14 +261,14 @@ CREATE PROCEDURE LOS_CRUD.MIGRAR_BI_SUCURSAL
 		SELECT DISTINCT 
 		FROM 
   END
-GO
+GO*/
 
 
 
 ---------------- MIGRACIONES A TABLAS EXTRAS ----------------
 
 ---------------- MIGRACIONES A HECHOS ----------------
-CREATE PROCEDURE LOS_CRUD.MIGRAR_BI_TICKETS
+/*CREATE PROCEDURE LOS_CRUD.MIGRAR_BI_TICKETS
  AS
   BEGIN
     INSERT INTO LOS_CRUD.BI_Ticket (cod_rango_etario_cliente, 
@@ -271,7 +279,7 @@ CREATE PROCEDURE LOS_CRUD.MIGRAR_BI_TICKETS
 		SELECT 
 		
 		  END
-GO
+GO*/
 
 
 ---------------- TABLAS DIMENSIONALES ----------------
@@ -297,7 +305,7 @@ CREATE TABLE LOS_CRUD.BI_UBICACION (
 
 -- Rango turnos (De 8 a 20 cada 4 horas)
 CREATE TABLE LOS_CRUD.BI_RANGO_TURNOS(
-    cod_rango_turnos INT IDENTITY(1,1) PRIMARY KEY,
+    cod_rango_turnos INT PRIMARY KEY,
     desc_rango_turnos NVARCHAR(50) NOT NULL
 );
 
@@ -342,7 +350,7 @@ CREATE TABLE LOS_CRUD.BI_Tickets (
     cod_rango_etario_cliente INT, 
 	cod_rango_etario_empleado INT FOREIGN KEY REFERENCES LOS_CRUD.BI_RANGO_ETARIO, 
     cod_dia_ticket INT FOREIGN KEY REFERENCES LOS_CRUD.BI_DIAS,
-    cod_tiempo INT FOREIGN KEY REFERENCES LOS_CRUD.BI_TIEMPO
+    cod_tiempo INT FOREIGN KEY REFERENCES LOS_CRUD.BI_TIEMPO,
     total_ticket DECIMAL(10,2) NOT NULL,
     FOREIGN KEY (cod_rango_etario_cliente) REFERENCES LOS_CRUD.BI_RANGO_ETARIO,
     FOREIGN KEY (cod_rango_etario_empleado) REFERENCES LOS_CRUD.BI_RANGO_ETARIO,
@@ -361,10 +369,33 @@ CREATE TABLE LOS_CRUD.BI_Tickets (
 
 ---------------- EXECUTES ----------------
 
+-- Ejecutar la migración de BI_UBICACION
+EXEC LOS_CRUD.MIGRAR_BI_UBICACION;
+
+-- Ejecutar la migración de BI_RANGO_ETARIO
+EXEC LOS_CRUD.MIGRAR_BI_RANGO_ETARIO;
+
+-- Ejecutar la migración de BI_DIAS
+EXEC LOS_CRUD.MIGRAR_BI_DIAS;
+
+-- Ejecutar la migración de BI_TIEMPO
+EXEC LOS_CRUD.MIGRAR_BI_TIEMPO;
+
+-- Ejecutar la migración de BI_RANGO_TURNOS
+EXEC LOS_CRUD.MIGRAR_BI_RANGO_TURNOS;
+
+-- Ejecutar la migración de BI_SUCURSAL
+--EXEC LOS_CRUD.MIGRAR_BI_SUCURSAL;
+
+-- Ejecutar la migración de BI_TICKETS
+--EXEC LOS_CRUD.MIGRAR_BI_TICKETS;
+
+
 ---------------- CREACION DE VIEWS ----------------
 
 
 -- VISTA 1
+/*
 CREATE VIEW LOS_CRUD.BI_TicketPromedioMensual AS
 SELECT 
     u.desc_ubicacion AS Ubicacion,
@@ -379,7 +410,7 @@ GROUP BY
     t.tiempo_anio, 
     t.tiempo_mes;
 
-
+*/
 
 
 
