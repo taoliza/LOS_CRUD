@@ -268,18 +268,26 @@ GO*/
 ---------------- MIGRACIONES A TABLAS EXTRAS ----------------
 
 ---------------- MIGRACIONES A HECHOS ----------------
-/*CREATE PROCEDURE LOS_CRUD.MIGRAR_BI_TICKETS
+CREATE PROCEDURE LOS_CRUD.MIGRAR_BI_TICKETS
  AS
   BEGIN
-    INSERT INTO LOS_CRUD.BI_Ticket (cod_rango_etario_cliente, 
+    INSERT INTO LOS_CRUD.BI_Tickets (cod_rango_etario_cliente, 
 	                                cod_rango_etario_empleado, 
                                     cod_dia_ticket,
                                     cod_tiempo,
                                     total_ticket)
-		SELECT 
-		
-		  END
-GO*/
+		SELECT LOS_CRUD.BI_CALCULAR_RANGO_ETARIO(c.fecha_nacimiento_cliente) AS cod_rango_etario_cliente,
+			LOS_CRUD.BI_CALCULAR_RANGO_ETARIO(e.fecha_nacimiento_empleado) AS cod_rango_etario_empleado,
+			bd.cod_dia,
+			bt.cod_tiempo,
+			t.total_ticket 
+		FROM LOS_CRUD.Ticket t
+		JOIN LOS_CRUD.Cliente c ON t.cod_cliente = c.cod_cliente
+		JOIN LOS_CRUD.Empleado e ON t.cod_empleado = e.legajo_empleado
+		JOIN LOS_CRUD.BI_TIEMPO bt ON YEAR(t.fecha_hora_ticket) = bt.tiempo_anio AND MONTH(t.fecha_hora_ticket) = bt.tiempo_mes
+		JOIN LOS_CRUD.BI_DIAS bd ON LOS_CRUD.BI_CALCULAR_DIA_SEMANA(t.fecha_hora_ticket) = bd.desc_dia
+	END
+GO
 
 
 ---------------- TABLAS DIMENSIONALES ----------------
@@ -388,7 +396,7 @@ EXEC LOS_CRUD.MIGRAR_BI_RANGO_TURNOS;
 --EXEC LOS_CRUD.MIGRAR_BI_SUCURSAL;
 
 -- Ejecutar la migración de BI_TICKETS
---EXEC LOS_CRUD.MIGRAR_BI_TICKETS;
+EXEC LOS_CRUD.MIGRAR_BI_TICKETS;
 
 
 ---------------- CREACION DE VIEWS ----------------
@@ -402,15 +410,15 @@ SELECT
     t.tiempo_anio AS Anio,
     t.tiempo_mes AS Mes,
     AVG(total_ticket) AS TicketPromedioMensual
-FROM LOS_CRUD.BI_Ticket
+FROM LOS_CRUD.BI_Tickets
     JOIN LOS_CRUD.BI_TIEMPO t ON cod_tiempo = t.cod_tiempo
     JOIN LOS_CRUD.BI_UBICACION u ON cod_ubicacion = u.cod_ubicacion
 GROUP BY 
     u.nombre_localidad, 
     t.tiempo_anio, 
     t.tiempo_mes;
+	*/
 
-*/
 
 
 
