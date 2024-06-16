@@ -251,7 +251,7 @@ INSERT INTO LOS_CRUD.BI_RANGO_TURNOS(cod_rango_turnos,desc_rango_turnos)
 END
 GO
 
-
+SELECT * FROM LOS_CRUD.BI_UBICACION
 
 -- Sucursal
 CREATE PROCEDURE LOS_CRUD.MIGRAR_BI_SUCURSAL
@@ -275,17 +275,21 @@ CREATE PROCEDURE LOS_CRUD.MIGRAR_BI_TICKETS
 	                                cod_rango_etario_empleado, 
                                     cod_dia_ticket,
                                     cod_tiempo,
+									cod_ubicacion,
                                     total_ticket)
 		SELECT LOS_CRUD.BI_CALCULAR_RANGO_ETARIO(c.fecha_nacimiento_cliente) AS cod_rango_etario_cliente,
 			LOS_CRUD.BI_CALCULAR_RANGO_ETARIO(e.fecha_nacimiento_empleado) AS cod_rango_etario_empleado,
 			bd.cod_dia,
 			bt.cod_tiempo,
+			bu.cod_ubicacion,
 			t.total_ticket 
 		FROM LOS_CRUD.Ticket t
 		JOIN LOS_CRUD.Cliente c ON t.cod_cliente = c.cod_cliente
 		JOIN LOS_CRUD.Empleado e ON t.cod_empleado = e.legajo_empleado
 		JOIN LOS_CRUD.BI_TIEMPO bt ON YEAR(t.fecha_hora_ticket) = bt.tiempo_anio AND MONTH(t.fecha_hora_ticket) = bt.tiempo_mes
 		JOIN LOS_CRUD.BI_DIAS bd ON LOS_CRUD.BI_CALCULAR_DIA_SEMANA(t.fecha_hora_ticket) = bd.desc_dia
+		JOIN LOS_CRUD.Sucursal s ON e.cod_sucursal = s.cod_sucursal
+		JOIN LOS_CRUD.BI_UBICACION bu ON LOS_CRUD.BI_CALCULAR_UBICACION(s.cod_localidad) = bu.desc_ubicacion
 	END
 GO
 
@@ -348,8 +352,6 @@ CREATE TABLE LOS_CRUD.BI_SUBCATEGORIA_PRODUCTO(
     desc_subcategoria NVARCHAR(50) NOT NULL
 );
 
-
-
 ---------------- TABLAS DE HECHOS ----------------
 
 
@@ -359,20 +361,15 @@ CREATE TABLE LOS_CRUD.BI_Tickets (
 	cod_rango_etario_empleado INT FOREIGN KEY REFERENCES LOS_CRUD.BI_RANGO_ETARIO, 
     cod_dia_ticket INT FOREIGN KEY REFERENCES LOS_CRUD.BI_DIAS,
     cod_tiempo INT FOREIGN KEY REFERENCES LOS_CRUD.BI_TIEMPO,
+	cod_ubicacion INT FOREIGN KEY REFERENCES LOS_CRUD.BI_UBICACION,
     total_ticket DECIMAL(10,2) NOT NULL,
     FOREIGN KEY (cod_rango_etario_cliente) REFERENCES LOS_CRUD.BI_RANGO_ETARIO,
     FOREIGN KEY (cod_rango_etario_empleado) REFERENCES LOS_CRUD.BI_RANGO_ETARIO,
     FOREIGN KEY (cod_dia_ticket) REFERENCES LOS_CRUD.BI_DIAS,
-    FOREIGN KEY (cod_tiempo) REFERENCES LOS_CRUD.BI_TIEMPO
+    FOREIGN KEY (cod_tiempo) REFERENCES LOS_CRUD.BI_TIEMPO,
+	FOREIGN KEY (cod_ubicacion) REFERENCES LOS_CRUD.BI_UBICACION
+
 );
-
-
-
-
-
-
-
-
 
 
 ---------------- EXECUTES ----------------
@@ -403,24 +400,19 @@ EXEC LOS_CRUD.MIGRAR_BI_TICKETS;
 
 
 -- VISTA 1
-/*
+
 CREATE VIEW LOS_CRUD.BI_TicketPromedioMensual AS
 SELECT 
     u.desc_ubicacion AS Ubicacion,
     t.tiempo_anio AS Anio,
     t.tiempo_mes AS Mes,
     AVG(total_ticket) AS TicketPromedioMensual
-FROM LOS_CRUD.BI_Tickets
-    JOIN LOS_CRUD.BI_TIEMPO t ON cod_tiempo = t.cod_tiempo
-    JOIN LOS_CRUD.BI_UBICACION u ON cod_ubicacion = u.cod_ubicacion
+FROM LOS_CRUD.BI_Tickets bt
+    JOIN LOS_CRUD.BI_TIEMPO t ON bt.cod_tiempo = t.cod_tiempo
+    JOIN LOS_CRUD.BI_UBICACION u ON bt.cod_ubicacion = u.cod_ubicacion
 GROUP BY 
-    u.nombre_localidad, 
+    u.desc_ubicacion, 
     t.tiempo_anio, 
     t.tiempo_mes;
-	*/
-
-
-
-
 
 ---------------- SELECTS DE LAS VISTAS ----------------
