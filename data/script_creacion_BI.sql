@@ -252,16 +252,16 @@ END
 GO
 
 
-/*
+
 -- Sucursal
 CREATE PROCEDURE LOS_CRUD.MIGRAR_BI_SUCURSAL
  AS
   BEGIN
     INSERT INTO LOS_CRUD.BI_SUCURSAL (cod_sucursal, nombre_sucursal, desc_ubicacion)
-		SELECT DISTINCT 
-		FROM 
+		SELECT DISTINCT cod_sucursal, nombre_sucursal, LOS_CRUD.BI_CALCULAR_UBICACION(cod_localidad) AS desc_ubicacion
+		FROM LOS_CRUD.Sucursal
   END
-GO*/
+GO
 
 
 
@@ -319,8 +319,8 @@ CREATE TABLE LOS_CRUD.BI_RANGO_TURNOS(
 
 -- Sucursal
 CREATE TABLE LOS_CRUD.BI_SUCURSAL(
-    sucursal_id INT PRIMARY KEY,
-    nombre NVARCHAR(255),
+    cod_sucursal INT PRIMARY KEY,
+    nombre_sucursal NVARCHAR(255),
     desc_ubicacion NVARCHAR(100),
 );
 
@@ -393,7 +393,7 @@ EXEC LOS_CRUD.MIGRAR_BI_TIEMPO;
 EXEC LOS_CRUD.MIGRAR_BI_RANGO_TURNOS;
 
 -- Ejecutar la migración de BI_SUCURSAL
---EXEC LOS_CRUD.MIGRAR_BI_SUCURSAL;
+EXEC LOS_CRUD.MIGRAR_BI_SUCURSAL;
 
 -- Ejecutar la migración de BI_TICKETS
 EXEC LOS_CRUD.MIGRAR_BI_TICKETS;
