@@ -75,6 +75,14 @@ IF EXISTS(SELECT [name] FROM sys.procedures WHERE [name] = 'MIGRAR_BI_TICKETS')
     DROP PROCEDURE LOS_CRUD.MIGRAR_BI_TICKETS;
 GO
 
+IF EXISTS(SELECT [name] FROM sys.procedures WHERE [name] = 'MIGRAR_BI_CATEGORIA_PRODUCTO')
+    DROP PROCEDURE LOS_CRUD.MIGRAR_BI_CATEGORIA_PRODUCTO;
+GO
+
+IF EXISTS(SELECT [name] FROM sys.procedures WHERE [name] = 'MIGRAR_BI_SUBCATEGORIA_PRODUCTO')
+    DROP PROCEDURE LOS_CRUD.MIGRAR_BI_SUBCATEGORIA_PRODUCTO;
+GO
+
 
 ---------------------- LIMPIAR VISTAS ----------------------
 
@@ -251,7 +259,6 @@ INSERT INTO LOS_CRUD.BI_RANGO_TURNOS(cod_rango_turnos,desc_rango_turnos)
 END
 GO
 
-SELECT * FROM LOS_CRUD.BI_UBICACION
 
 -- Sucursal
 CREATE PROCEDURE LOS_CRUD.MIGRAR_BI_SUCURSAL
@@ -263,6 +270,24 @@ CREATE PROCEDURE LOS_CRUD.MIGRAR_BI_SUCURSAL
   END
 GO
 
+-- Categoria de productos
+CREATE PROCEDURE LOS_CRUD.MIGRAR_BI_CATEGORIA_PRODUCTO
+AS
+BEGIN
+	INSERT INTO LOS_CRUD.BI_CATEGORIA_PRODUCTO (cod_categoria, desc_categoria)
+		SELECT DISTINCT cod_categoria, nombre_categoria
+		FROM LOS_CRUD.Categoria
+	END
+GO
+
+CREATE PROCEDURE LOS_CRUD.MIGRAR_BI_SUBCATEGORIA_PRODUCTO
+AS
+BEGIN
+	INSERT INTO LOS_CRUD.BI_CATEGORIA_PRODUCTO (cod_subcategoria, desc_subcategoria)
+		SELECT DISTINCT cod_subcategoria, nombre_subcategoria
+		FROM LOS_CRUD.SubCategoria
+	END
+GO
 
 
 ---------------- MIGRACIONES A TABLAS EXTRAS ----------------
@@ -276,12 +301,16 @@ CREATE PROCEDURE LOS_CRUD.MIGRAR_BI_TICKETS
                                     cod_dia_ticket,
                                     cod_tiempo,
 									cod_ubicacion,
+									cod_rango_turnos,
+									cantidad_articulos,
                                     total_ticket)
-		SELECT LOS_CRUD.BI_CALCULAR_RANGO_ETARIO(c.fecha_nacimiento_cliente) AS cod_rango_etario_cliente,
+		SELECT DISTINCT LOS_CRUD.BI_CALCULAR_RANGO_ETARIO(c.fecha_nacimiento_cliente) AS cod_rango_etario_cliente,
 			LOS_CRUD.BI_CALCULAR_RANGO_ETARIO(e.fecha_nacimiento_empleado) AS cod_rango_etario_empleado,
 			bd.cod_dia,
 			bt.cod_tiempo,
 			bu.cod_ubicacion,
+			LOS_CRUD.BI_CALCULAR_RANGO_TURNOS(t.fecha_hora_ticket) AS cod_rango_turno,
+			SUM(td.cantidad) AS cantidad_articulos,
 			t.total_ticket 
 		FROM LOS_CRUD.Ticket t
 		JOIN LOS_CRUD.Cliente c ON t.cod_cliente = c.cod_cliente
@@ -290,6 +319,15 @@ CREATE PROCEDURE LOS_CRUD.MIGRAR_BI_TICKETS
 		JOIN LOS_CRUD.BI_DIAS bd ON LOS_CRUD.BI_CALCULAR_DIA_SEMANA(t.fecha_hora_ticket) = bd.desc_dia
 		JOIN LOS_CRUD.Sucursal s ON e.cod_sucursal = s.cod_sucursal
 		JOIN LOS_CRUD.BI_UBICACION bu ON LOS_CRUD.BI_CALCULAR_UBICACION(s.cod_localidad) = bu.desc_ubicacion
+		JOIN LOS_CRUD.TicketDetalle td ON td.cod_ticket = t.cod_ticket
+		GROUP BY 
+			c.fecha_nacimiento_cliente,
+			e.fecha_nacimiento_empleado,
+			bd.cod_dia,
+			bt.cod_tiempo,
+			bu.cod_ubicacion,
+			t.fecha_hora_ticket,
+			t.total_ticket 
 	END
 GO
 
@@ -362,12 +400,15 @@ CREATE TABLE LOS_CRUD.BI_Tickets (
     cod_dia_ticket INT FOREIGN KEY REFERENCES LOS_CRUD.BI_DIAS,
     cod_tiempo INT FOREIGN KEY REFERENCES LOS_CRUD.BI_TIEMPO,
 	cod_ubicacion INT FOREIGN KEY REFERENCES LOS_CRUD.BI_UBICACION,
-    total_ticket DECIMAL(10,2) NOT NULL,
+	cod_rango_turnos INT FOREIGN KEY REFERENCES LOS_CRUD.BI_RANGO_TURNOS,
+	cantidad_articulos DECIMAL(10,2),
+    total_ticket DECIMAL(10,2) NOT NULL
     FOREIGN KEY (cod_rango_etario_cliente) REFERENCES LOS_CRUD.BI_RANGO_ETARIO,
     FOREIGN KEY (cod_rango_etario_empleado) REFERENCES LOS_CRUD.BI_RANGO_ETARIO,
     FOREIGN KEY (cod_dia_ticket) REFERENCES LOS_CRUD.BI_DIAS,
     FOREIGN KEY (cod_tiempo) REFERENCES LOS_CRUD.BI_TIEMPO,
-	FOREIGN KEY (cod_ubicacion) REFERENCES LOS_CRUD.BI_UBICACION
+	FOREIGN KEY (cod_ubicacion) REFERENCES LOS_CRUD.BI_UBICACION,
+	FOREIGN KEY (cod_rango_turnos) REFERENCES LOS_CRUD.BI_RANGO_TURNOS
 
 );
 
@@ -400,19 +441,33 @@ EXEC LOS_CRUD.MIGRAR_BI_TICKETS;
 
 
 -- VISTA 1
-
+-- 1. Ticket promedio mensual
 CREATE VIEW LOS_CRUD.BI_TicketPromedioMensual AS
-SELECT 
-    u.desc_ubicacion AS Ubicacion,
-    t.tiempo_anio AS Anio,
-    t.tiempo_mes AS Mes,
-    AVG(total_ticket) AS TicketPromedioMensual
-FROM LOS_CRUD.BI_Tickets bt
-    JOIN LOS_CRUD.BI_TIEMPO t ON bt.cod_tiempo = t.cod_tiempo
-    JOIN LOS_CRUD.BI_UBICACION u ON bt.cod_ubicacion = u.cod_ubicacion
-GROUP BY 
-    u.desc_ubicacion, 
-    t.tiempo_anio, 
-    t.tiempo_mes;
+	SELECT 
+		u.desc_ubicacion AS Ubicacion,
+		t.tiempo_anio AS Anio,
+		t.tiempo_mes AS Mes,
+		AVG(total_ticket) AS TicketPromedioMensual
+	FROM LOS_CRUD.BI_Tickets bt
+		JOIN LOS_CRUD.BI_TIEMPO t ON bt.cod_tiempo = t.cod_tiempo
+		JOIN LOS_CRUD.BI_UBICACION u ON bt.cod_ubicacion = u.cod_ubicacion
+	GROUP BY 
+		u.desc_ubicacion, 
+		t.tiempo_anio, 
+		t.tiempo_mes;
+
+--2 Cantidad de unidades promedio
+CREATE VIEW LOS_CRUD.BI_UnidadesPromedioPorTurnoYCuatrimestre AS
+	SELECT DISTINCT
+		t.tiempo_cuatrimestre,
+		brt.desc_rango_turnos,
+		AVG(bt.cantidad_articulos) AS unidades_promedio
+	FROM LOS_CRUD.BI_Tickets bt
+		JOIN LOS_CRUD.BI_TIEMPO t ON bt.cod_tiempo = t.cod_tiempo
+		JOIN LOS_CRUD.BI_RANGO_TURNOS brt ON bt.cod_rango_turnos = brt.cod_rango_turnos
+	GROUP BY
+		t.tiempo_cuatrimestre,
+		brt.desc_rango_turnos;
+	
 
 ---------------- SELECTS DE LAS VISTAS ----------------
