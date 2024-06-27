@@ -21,6 +21,9 @@ GO
 IF EXISTS(SELECT [name] FROM sys.tables WHERE [name] = 'BI_Tickets')
     DROP TABLE LOS_CRUD.BI_Tickets;
 
+IF EXISTS(SELECT [name] FROM sys.tables WHERE [name] = 'BI_PromocionAplicada')
+    DROP TABLE LOS_CRUD.BI_PromocionAplicada;
+
 IF EXISTS(SELECT [name] FROM sys.tables WHERE [name] = 'BI_TIEMPO')
     DROP TABLE LOS_CRUD.BI_TIEMPO;
 
@@ -42,14 +45,17 @@ IF EXISTS(SELECT [name] FROM sys.tables WHERE [name] = 'BI_RANGO_ETARIO')
 IF EXISTS(SELECT [name] FROM sys.tables WHERE [name] = 'BI_MDP')
     DROP TABLE LOS_CRUD.BI_MDP;
 
+IF EXISTS(SELECT [name] FROM sys.tables WHERE [name] = 'BI_SUBCATEGORIA_PRODUCTO')
+    DROP TABLE LOS_CRUD.BI_SUBCATEGORIA_PRODUCTO;
 IF EXISTS(SELECT [name] FROM sys.tables WHERE [name] = 'BI_CATEGORIA_PRODUCTO')
     DROP TABLE LOS_CRUD.BI_CATEGORIA_PRODUCTO;
 
-IF EXISTS(SELECT [name] FROM sys.tables WHERE [name] = 'BI_SUBCATEGORIA_PRODUCTO')
-    DROP TABLE LOS_CRUD.BI_SUBCATEGORIA_PRODUCTO;
-
 IF EXISTS(SELECT [name] FROM sys.tables WHERE [name] = 'BI_TIPO_CAJA')
     DROP TABLE LOS_CRUD.BI_TIPO_CAJA;
+
+
+
+
 GO
 
 ------------------ LIMPIAR PROCEDURES ---------------------------
@@ -74,18 +80,24 @@ IF EXISTS(SELECT [name] FROM sys.procedures WHERE [name] = 'MIGRAR_BI_SUCURSAL')
 
 IF EXISTS(SELECT [name] FROM sys.procedures WHERE [name] = 'MIGRAR_BI_TICKETS')
     DROP PROCEDURE LOS_CRUD.MIGRAR_BI_TICKETS;
-GO
+
+IF EXISTS(SELECT [name] FROM sys.procedures WHERE [name] = 'MIGRAR_BI_PROMOCION_APLICADA')
+    DROP PROCEDURE LOS_CRUD.MIGRAR_BI_PROMOCION_APLICADA;
 
 IF EXISTS(SELECT [name] FROM sys.procedures WHERE [name] = 'MIGRAR_BI_CATEGORIA_PRODUCTO')
     DROP PROCEDURE LOS_CRUD.MIGRAR_BI_CATEGORIA_PRODUCTO;
-GO
+
 
 IF EXISTS(SELECT [name] FROM sys.procedures WHERE [name] = 'MIGRAR_BI_SUBCATEGORIA_PRODUCTO')
     DROP PROCEDURE LOS_CRUD.MIGRAR_BI_SUBCATEGORIA_PRODUCTO;
-GO
+
 
 IF EXISTS(SELECT [name] FROM sys.procedures WHERE [name] = 'MIGRAR_BI_TIPO_CAJA')
     DROP PROCEDURE LOS_CRUD.MIGRAR_BI_TIPO_CAJA;
+
+
+
+
 GO
 
 
@@ -93,8 +105,24 @@ GO
 
 IF EXISTS (SELECT [name] FROM sys.views WHERE [name] = 'BI_TicketPromedioMensual')
     DROP VIEW LOS_CRUD.BI_TicketPromedioMensual;
-GO
 
+IF EXISTS (SELECT [name] FROM sys.views WHERE [name] = 'BI_UnidadesPromedioPorTurnoYCuatrimestre')
+    DROP VIEW LOS_CRUD.BI_UnidadesPromedioPorTurnoYCuatrimestre;
+
+IF EXISTS (SELECT [name] FROM sys.views WHERE [name] = 'BI_PorcentajeAnualDeVentas')
+    DROP VIEW LOS_CRUD.BI_PorcentajeAnualDeVentas;
+
+IF EXISTS (SELECT [name] FROM sys.views WHERE [name] = 'BI_VentasPorTurno')
+    DROP VIEW LOS_CRUD.BI_VentasPorTurno; 
+
+IF EXISTS (SELECT [name] FROM sys.views WHERE [name] = 'BI_PorcentajeDescuentoTicket')
+    DROP VIEW LOS_CRUD.BI_PorcentajeDescuentoTicket; 
+
+IF EXISTS (SELECT [name] FROM sys.views WHERE [name] = 'BI_CategoriasMayorDescuento')
+    DROP VIEW LOS_CRUD.BI_CategoriasMayorDescuento; 
+
+
+GO
 ---------------- FUNCIONES ----------------
 
 --Rango Etario
@@ -288,8 +316,8 @@ GO
 CREATE PROCEDURE LOS_CRUD.MIGRAR_BI_SUBCATEGORIA_PRODUCTO
 AS
 BEGIN
-	INSERT INTO LOS_CRUD.BI_SUBCATEGORIA_PRODUCTO (cod_subcategoria, desc_subcategoria)
-		SELECT DISTINCT cod_subcategoria, nombre_subcategoria
+	INSERT INTO LOS_CRUD.BI_SUBCATEGORIA_PRODUCTO (cod_subcategoria, cod_categoria, desc_subcategoria)
+		SELECT DISTINCT cod_subcategoria, cod_categoria, nombre_subcategoria
 		FROM LOS_CRUD.SubCategoria
 	END
 GO
@@ -317,16 +345,18 @@ CREATE PROCEDURE LOS_CRUD.MIGRAR_BI_TICKETS
 									cod_rango_turnos,
 									cod_tipo_caja,
 									cantidad_articulos,
-                                    total_ticket)
-		SELECT DISTINCT LOS_CRUD.BI_CALCULAR_RANGO_ETARIO(c.fecha_nacimiento_cliente) AS cod_rango_etario_cliente,
-			LOS_CRUD.BI_CALCULAR_RANGO_ETARIO(e.fecha_nacimiento_empleado) AS cod_rango_etario_empleado,
+                                    total_ticket,
+									descuento_aplicado_ticket)
+		SELECT DISTINCT LOS_CRUD.BI_CALCULAR_RANGO_ETARIO(c.fecha_nacimiento_cliente) AS Cod_rango_etario_cliente,
+			LOS_CRUD.BI_CALCULAR_RANGO_ETARIO(e.fecha_nacimiento_empleado) AS Cod_rango_etario_empleado,
 			bd.cod_dia,
 			bt.cod_tiempo,
 			bu.cod_ubicacion,
-			LOS_CRUD.BI_CALCULAR_RANGO_TURNOS(t.fecha_hora_ticket) AS cod_rango_turno,
+			LOS_CRUD.BI_CALCULAR_RANGO_TURNOS(t.fecha_hora_ticket) AS Cod_rango_turno,
 			bc.cod_tipo_caja,
-			SUM(td.cantidad) AS cantidad_articulos,
-			t.total_ticket 
+			SUM(td.cantidad) AS Cantidad_articulos,
+			t.total_ticket,
+			t.total_descuento_aplicado + t.total_descuento_aplicado_mp AS Descuento_aplicado
 		FROM LOS_CRUD.Ticket t
 		JOIN LOS_CRUD.Cliente c ON t.cod_cliente = c.cod_cliente
 		JOIN LOS_CRUD.Empleado e ON t.cod_empleado = e.legajo_empleado
@@ -345,7 +375,24 @@ CREATE PROCEDURE LOS_CRUD.MIGRAR_BI_TICKETS
 			bu.cod_ubicacion,
 			t.fecha_hora_ticket,
 			t.total_ticket,
-			bc.cod_tipo_caja
+			bc.cod_tipo_caja,
+			t.total_descuento_aplicado + t.total_descuento_aplicado_mp
+	END
+GO
+
+CREATE PROCEDURE LOS_CRUD.MIGRAR_BI_PROMOCION_APLICADA
+ AS
+  BEGIN
+    INSERT INTO LOS_CRUD.BI_PromocionAplicada (cod_categoria, descuento_aplicado, cod_tiempo)
+	SELECT DISTINCT 
+		sc.cod_categoria,
+		p.descuento_aplicado
+		t.cod_tiempo
+	FROM LOS_CRUD.PromocionAplicada p
+	JOIN LOS_CRUD.Producto prod ON prod.cod_producto = p.cod_producto
+	JOIN LOS_CRUD.BI_SUBCATEGORIA_PRODUCTO sc ON sc.cod_subcategoria = prod.cod_subcategoria
+	JOIN LOS_CRUD.Ticket bt ON bt.cod_ticket = p.cod_ticket
+	JOIN LOS_CRUD.BI_TIEMPO t ON YEAR(bt.fecha_hora_ticket) = t.tiempo_anio AND MONTH(bt.fecha_hora_ticket) = t.tiempo_mes
 	END
 GO
 
@@ -406,9 +453,11 @@ CREATE TABLE LOS_CRUD.BI_CATEGORIA_PRODUCTO(
 -- Subcategoria de productos
 CREATE TABLE LOS_CRUD.BI_SUBCATEGORIA_PRODUCTO(
     cod_subcategoria INT PRIMARY KEY,
+	cod_categoria INT FOREIGN KEY REFERENCES LOS_CRUD.BI_CATEGORIA_PRODUCTO,
     desc_subcategoria NVARCHAR(50) NOT NULL
 );
 
+-- Tipo de caja
 CREATE TABLE LOS_CRUD.BI_TIPO_CAJA(
     cod_tipo_caja INT PRIMARY KEY,
     desc_tipo_caja NVARCHAR(50) NOT NULL
@@ -427,39 +476,37 @@ CREATE TABLE LOS_CRUD.BI_Tickets (
 	cod_rango_turnos INT FOREIGN KEY REFERENCES LOS_CRUD.BI_RANGO_TURNOS,
 	cod_tipo_caja INT FOREIGN KEY REFERENCES LOS_CRUD.BI_TIPO_CAJA,
 	cantidad_articulos DECIMAL(10,2),
-    total_ticket DECIMAL(10,2) NOT NULL
+    total_ticket DECIMAL(10,2) NOT NULL,
+	descuento_aplicado_ticket DECIMAL(10,2) NOT NULL
     FOREIGN KEY (cod_rango_etario_cliente) REFERENCES LOS_CRUD.BI_RANGO_ETARIO,
     FOREIGN KEY (cod_rango_etario_empleado) REFERENCES LOS_CRUD.BI_RANGO_ETARIO,
     FOREIGN KEY (cod_dia_ticket) REFERENCES LOS_CRUD.BI_DIAS,
     FOREIGN KEY (cod_tiempo) REFERENCES LOS_CRUD.BI_TIEMPO,
-	FOREIGN KEY (cod_ubicacion) REFERENCES LOS_CRUD.BI_UBICACION,
 	FOREIGN KEY (cod_rango_turnos) REFERENCES LOS_CRUD.BI_RANGO_TURNOS,
 	FOREIGN KEY (cod_tipo_caja) REFERENCES LOS_CRUD.BI_TIPO_CAJA
 );
 
+CREATE TABLE LOS_CRUD.BI_PromocionAplicada (
+	cod_categoria INT FOREIGN KEY REFERENCES LOS_CRUD.BI_CATEGORIA_PRODUCTO,
+	descuento_aplicado DECIMAL(10,2),
+	cod_tiempo INT FOREIGN KEY REFERENCES LOS_CRUD.BI_TIEMPO
+)
+
 
 ---------------- EXECUTES ----------------
 
--- Ejecutar la migración de BI_UBICACION
+
 EXEC LOS_CRUD.MIGRAR_BI_UBICACION;
 
--- Ejecutar la migración de BI_RANGO_ETARIO
 EXEC LOS_CRUD.MIGRAR_BI_RANGO_ETARIO;
 
--- Ejecutar la migración de BI_DIAS
 EXEC LOS_CRUD.MIGRAR_BI_DIAS;
 
--- Ejecutar la migración de BI_TIEMPO
 EXEC LOS_CRUD.MIGRAR_BI_TIEMPO;
 
--- Ejecutar la migración de BI_RANGO_TURNOS
 EXEC LOS_CRUD.MIGRAR_BI_RANGO_TURNOS;
 
--- Ejecutar la migración de BI_SUCURSAL
 EXEC LOS_CRUD.MIGRAR_BI_SUCURSAL;
-
--- Ejecutar la migración de BI_TICKETS
-EXEC LOS_CRUD.MIGRAR_BI_TICKETS;
 
 EXEC LOS_CRUD.MIGRAR_BI_CATEGORIA_PRODUCTO;
 
@@ -467,12 +514,18 @@ EXEC LOS_CRUD.MIGRAR_BI_SUBCATEGORIA_PRODUCTO;
 
 EXEC LOS_CRUD.MIGRAR_BI_TIPO_CAJA;
 
+EXEC LOS_CRUD.MIGRAR_BI_TICKETS;
+
+EXEC LOS_CRUD.MIGRAR_BI_PROMOCION_APLICADA;
+
+Print 'Executes realizados'
+GO
 ---------------- CREACION DE VIEWS ----------------
 
 
--- VISTA 1
+
 -- 1. Ticket promedio mensual
-/*CREATE VIEW LOS_CRUD.BI_TicketPromedioMensual AS
+CREATE VIEW LOS_CRUD.BI_TicketPromedioMensual AS
 	SELECT 
 		u.desc_ubicacion AS Ubicacion,
 		t.tiempo_anio AS Anio,
@@ -485,39 +538,109 @@ EXEC LOS_CRUD.MIGRAR_BI_TIPO_CAJA;
 		u.desc_ubicacion, 
 		t.tiempo_anio, 
 		t.tiempo_mes;
+GO
 
 --2 Cantidad de unidades promedio
 CREATE VIEW LOS_CRUD.BI_UnidadesPromedioPorTurnoYCuatrimestre AS
 	SELECT DISTINCT
-		t.tiempo_cuatrimestre,
-		brt.desc_rango_turnos,
-		AVG(bt.cantidad_articulos) AS unidades_promedio
+		t.tiempo_cuatrimestre AS Cuatrimestre,
+		brt.desc_rango_turnos AS Turno,
+		AVG(bt.cantidad_articulos) AS Promedio_unidades
 	FROM LOS_CRUD.BI_Tickets bt
 		JOIN LOS_CRUD.BI_TIEMPO t ON bt.cod_tiempo = t.cod_tiempo
 		JOIN LOS_CRUD.BI_RANGO_TURNOS brt ON bt.cod_rango_turnos = brt.cod_rango_turnos
 	GROUP BY
 		t.tiempo_cuatrimestre,
-		brt.desc_rango_turnos;*/
-	
+		brt.desc_rango_turnos;
+GO		
+
 --3 Porcentaje anual de ventas
-/*CREATE VIEW LOS_CRUD.BI_PorcentajeAnualDeVentas
+CREATE VIEW LOS_CRUD.BI_PorcentajeAnualDeVentas AS
 	SELECT
-		br.desc_rango_etario,
-		bc.desc_tipo_caja,
-		bt.tiempo_cuatrimestre,
-		bt.tiempo_anio,
+		br.desc_rango_etario AS Edad,
+		bc.desc_tipo_caja AS Tipo_caja,
+		bt.tiempo_cuatrimestre AS Cuatrimestre,
+		bt.tiempo_anio AS Anio,
 		(CAST(COUNT(br.desc_rango_etario) AS DECIMAL(6, 2)) / (SELECT COUNT(*) FROM LOS_CRUD.BI_Tickets)) * 100 AS PorcentajeAnualDeVentas
 	FROM LOS_CRUD.BI_Tickets t
 		JOIN LOS_CRUD.BI_RANGO_ETARIO br ON br.cod_rango_etario = t.cod_rango_etario_empleado
 		JOIN LOS_CRUD.BI_TIPO_CAJA bc ON bc.cod_tipo_caja = t.cod_tipo_caja
 		JOIN LOS_CRUD.BI_TIEMPO bt ON bt.cod_tiempo = t.cod_tiempo
 	GROUP BY
-		br.desc_rango_etario,
-		bc.desc_tipo_caja,
+		bt.tiempo_anio,
 		bt.tiempo_cuatrimestre,
-		bt.tiempo_anio*/
+		br.desc_rango_etario,
+		bc.desc_tipo_caja
+GO
+		
+--4 Cantidad de ventas registradas por turno
+		
+CREATE VIEW LOS_CRUD.BI_VentasPorTurno AS
+	SELECT
+		u.desc_ubicacion AS Localidad,
+		t.tiempo_anio AS Anio,
+		t.tiempo_mes AS Mes,
+		brt.desc_rango_turnos AS Turno,
+		COUNT(total_ticket) AS Cantidad_ventas
+	FROM LOS_CRUD.BI_Tickets bt
+		JOIN LOS_CRUD.BI_TIEMPO t ON t.cod_tiempo = bt.cod_tiempo
+		JOIN LOS_CRUD.BI_UBICACION u ON u.cod_ubicacion = bt.cod_ubicacion
+		JOIN LOS_CRUD.BI_RANGO_TURNOS brt ON brt.cod_rango_turnos = bt.cod_rango_turnos
+	GROUP BY
+		brt.desc_rango_turnos, u.desc_ubicacion, t.tiempo_anio, t.tiempo_mes
+GO
 
+--5 Porcentaje de descuento aplicados en función del total de los tickets
+
+CREATE VIEW LOS_CRUD.BI_PorcentajeDescuentoTicket AS
+	SELECT 
+		t.tiempo_anio AS Anio,
+		t.tiempo_mes AS Mes,
+		(SUM(bt.descuento_aplicado_ticket) / SUM(bt.total_ticket)) * 100 AS Porcentaje_descuento
+	FROM LOS_CRUD.BI_Tickets bt
+		JOIN LOS_CRUD.BI_TIEMPO t ON t.cod_tiempo = bt.cod_tiempo
+	GROUP BY
+		t.tiempo_anio, t.tiempo_mes
+GO
+
+-- 6
+CREATE VIEW LOS_CRUD.BI_CategoriasMayorDescuento AS
+WITH CTE_CategoriasDescuento AS (
+	SELECT 
+		cat.desc_categoria,
+		prom.descuento_aplicado,
+		t.tiempo_anio,
+		t.tiempo_cuatrimestre,
+		ROW_NUMBER() OVER (PARTITION BY t.tiempo_anio, t.tiempo_cuatrimestre ORDER BY prom.descuento_aplicado DESC) AS rn
+	FROM LOS_CRUD.BI_PromocionAplicada prom
+		JOIN LOS_CRUD.BI_CATEGORIA_PRODUCTO cat ON cat.cod_categoria = prom.cod_categoria
+		JOIN LOS_CRUD.BI_TIEMPO t ON t.cod_tiempo = prom.cod_tiempo
+)
+SELECT
+	desc_categoria,
+	descuento_aplicado,
+	tiempo_anio,
+	tiempo_cuatrimestre
+FROM CTE_CategoriasDescuento
+WHERE rn <= 3;
+GO
 
 
 
 ---------------- SELECTS DE LAS VISTAS ----------------
+SELECT * from LOS_CRUD.BI_TicketPromedioMensual 	
+ORDER BY Anio, Mes;
+
+SELECT * from LOS_CRUD.BI_UnidadesPromedioPorTurnoYCuatrimestre
+ORDER BY cuatrimestre, turno;
+
+SELECT * from LOS_CRUD.BI_PorcentajeAnualDeVentas
+ORDER BY Cuatrimestre, Edad, Tipo_caja, Anio, PorcentajeAnualDeVentas;
+
+SELECT * from LOS_CRUD.BI_VentasPorTurno
+ORDER BY Turno, Localidad, Anio, Mes;
+
+
+SELECT * from LOS_CRUD.BI_PorcentajeDescuentoTicket
+
+SELECT * from LOS_CRUD.BI_CategoriasMayorDescuento
