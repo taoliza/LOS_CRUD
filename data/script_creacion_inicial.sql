@@ -447,21 +447,6 @@ BEGIN
 END
 GO
 
---Promocion Aplicada
-CREATE PROCEDURE LOS_CRUD.MigrarPromocionAplicada
-AS
-BEGIN
-    INSERT INTO LOS_CRUD.PromocionAplicada (cod_ticket, cod_promocion)
-    SELECT DISTINCT 
-        t.cod_ticket, 
-        p.cod_promocion
-    FROM gd_esquema.Maestra gm
-    JOIN LOS_CRUD.Ticket t ON gm.TICKET_NUMERO = t.cod_ticket_old
-    JOIN LOS_CRUD.Promocion p ON gm.PROMO_CODIGO = p.cod_promocion
-    WHERE PROMO_CODIGO IS NOT NULL;
-END
-GO
-
 --Ticket detalle
 CREATE PROCEDURE LOS_CRUD.MigrarTicketDetalle
 AS
@@ -484,6 +469,24 @@ BEGIN
 END
 GO
 
+--Promocion Aplicada
+CREATE PROCEDURE LOS_CRUD.MigrarPromocionAplicada
+AS
+BEGIN
+    INSERT INTO LOS_CRUD.PromocionAplicada (cod_ticket,cod_producto,cod_promocion, descuento_aplicado)
+    SELECT DISTINCT 
+        t.cod_ticket, 
+		td.cod_producto,
+        p.cod_promocion,
+		gm.PROMO_APLICADA_DESCUENTO
+    FROM gd_esquema.Maestra gm
+    JOIN LOS_CRUD.Ticket t ON gm.TICKET_NUMERO = t.cod_ticket_old
+	JOIN LOS_CRUD.TicketDetalle td ON td.cod_ticket = t.cod_ticket
+    JOIN LOS_CRUD.Promocion p ON gm.PROMO_CODIGO = p.cod_promocion
+    WHERE PROMO_CODIGO IS NOT NULL;
+END
+GO
+
 --Reglas
 CREATE PROCEDURE LOS_CRUD.MigrarReglas
 AS
@@ -493,7 +496,7 @@ BEGIN
 								cant_aplicable_regla, descripcion_regla,
 								descuento_aplicable_regla, cantidad_max_prod)
     SELECT DISTINCT
-		PROMO_CODIGO,
+		p.cod_promocion,
 		REGLA_APLICA_MISMA_MARCA,
 		REGLA_APLICA_MISMO_PROD,
 		REGLA_CANT_APLICA_DESCUENTO,
@@ -501,7 +504,8 @@ BEGIN
         REGLA_DESCRIPCION,
 		REGLA_DESCUENTO_APLICABLE_PROD,
 		REGLA_CANT_MAX_PROD
-    FROM gd_esquema.Maestra
+    FROM gd_esquema.Maestra gm
+	JOIN LOS_CRUD.Promocion p ON gm.PROMO_CODIGO = p.cod_promocion
     WHERE REGLA_DESCRIPCION IS NOT NULL;
 END
 GO
@@ -720,6 +724,17 @@ CREATE TABLE LOS_CRUD.PromocionProducto (
     FOREIGN KEY (cod_producto) REFERENCES LOS_CRUD.Producto(cod_producto)
 );
 
+-- Crear tabla TicketDetalle
+CREATE TABLE LOS_CRUD.TicketDetalle (
+	cod_ticket_detalle INT IDENTITY(1,1) PRIMARY KEY,
+    cod_ticket INT,
+    cod_producto INT,
+    cantidad DECIMAL(10, 2),
+    total DECIMAL(10, 2),
+    FOREIGN KEY (cod_ticket) REFERENCES LOS_CRUD.Ticket(cod_ticket),
+    FOREIGN KEY (cod_producto) REFERENCES LOS_CRUD.Producto(cod_producto)
+);
+
 -- Crear tabla PromocionAplicada
 CREATE TABLE LOS_CRUD.PromocionAplicada (
     cod_promocion_aplicada INT IDENTITY(1,1) PRIMARY KEY,
@@ -744,16 +759,6 @@ CREATE TABLE LOS_CRUD.Descuento (
 );
 
 
--- Crear tabla TicketDetalle
-CREATE TABLE LOS_CRUD.TicketDetalle (
-	cod_ticket_detalle INT IDENTITY(1,1) PRIMARY KEY,
-    cod_ticket INT,
-    cod_producto INT,
-    cantidad DECIMAL(10, 2),
-    total DECIMAL(10, 2),
-    FOREIGN KEY (cod_ticket) REFERENCES LOS_CRUD.Ticket(cod_ticket),
-    FOREIGN KEY (cod_producto) REFERENCES LOS_CRUD.Producto(cod_producto)
-);
 
 -- Crear tabla Super
 CREATE TABLE LOS_CRUD.Super (
