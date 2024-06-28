@@ -24,6 +24,9 @@ IF EXISTS(SELECT [name] FROM sys.tables WHERE [name] = 'BI_Tickets')
 IF EXISTS(SELECT [name] FROM sys.tables WHERE [name] = 'BI_PromocionAplicada')
     DROP TABLE LOS_CRUD.BI_PromocionAplicada;
 
+IF EXISTS(SELECT [name] FROM sys.tables WHERE [name] = 'BI_Envios')
+    DROP TABLE LOS_CRUD.BI_Envios;
+
 IF EXISTS(SELECT [name] FROM sys.tables WHERE [name] = 'BI_TIEMPO')
     DROP TABLE LOS_CRUD.BI_TIEMPO;
 
@@ -52,7 +55,6 @@ IF EXISTS(SELECT [name] FROM sys.tables WHERE [name] = 'BI_CATEGORIA_PRODUCTO')
 
 IF EXISTS(SELECT [name] FROM sys.tables WHERE [name] = 'BI_TIPO_CAJA')
     DROP TABLE LOS_CRUD.BI_TIPO_CAJA;
-
 
 
 
@@ -95,6 +97,8 @@ IF EXISTS(SELECT [name] FROM sys.procedures WHERE [name] = 'MIGRAR_BI_SUBCATEGOR
 IF EXISTS(SELECT [name] FROM sys.procedures WHERE [name] = 'MIGRAR_BI_TIPO_CAJA')
     DROP PROCEDURE LOS_CRUD.MIGRAR_BI_TIPO_CAJA;
 
+IF EXISTS(SELECT [name] FROM sys.procedures WHERE [name] = 'MIGRAR_BI_ENVIOS')
+    DROP PROCEDURE LOS_CRUD.MIGRAR_BI_ENVIOS;
 
 
 
@@ -120,6 +124,9 @@ IF EXISTS (SELECT [name] FROM sys.views WHERE [name] = 'BI_PorcentajeDescuentoTi
 
 IF EXISTS (SELECT [name] FROM sys.views WHERE [name] = 'BI_CategoriasMayorDescuento')
     DROP VIEW LOS_CRUD.BI_CategoriasMayorDescuento; 
+
+IF EXISTS (SELECT [name] FROM sys.views WHERE [name] = 'BI_PorcentajeCumplimientoEnvios')
+    DROP VIEW LOS_CRUD.BI_PorcentajeCumplimientoEnvios; 
 
 
 GO
@@ -386,7 +393,7 @@ CREATE PROCEDURE LOS_CRUD.MIGRAR_BI_PROMOCION_APLICADA
     INSERT INTO LOS_CRUD.BI_PromocionAplicada (cod_categoria, descuento_aplicado, cod_tiempo)
 	SELECT DISTINCT 
 		sc.cod_categoria,
-		p.descuento_aplicado
+		p.descuento_aplicado,
 		t.cod_tiempo
 	FROM LOS_CRUD.PromocionAplicada p
 	JOIN LOS_CRUD.Producto prod ON prod.cod_producto = p.cod_producto
@@ -396,6 +403,22 @@ CREATE PROCEDURE LOS_CRUD.MIGRAR_BI_PROMOCION_APLICADA
 	END
 GO
 
+CREATE PROCEDURE LOS_CRUD.MIGRAR_BI_ENVIOS
+ AS
+  BEGIN
+    INSERT INTO LOS_CRUD.BI_Envios (cod_sucursal, anio_fecha_programada_envio, mes_fecha_programada_envio, anio_fecha_entrega_envio, mes_fecha_entrega_envio)
+	SELECT 
+		s.cod_sucursal,
+		YEAR(e.fecha_programada_envio),
+		MONTH(e.fecha_programada_envio),
+		YEAR(e.fecha_entrega_envio),
+		MONTH(e.fecha_entrega_envio)
+	FROM LOS_CRUD.Envio e
+	JOIN LOS_CRUD.Ticket t ON e.cod_ticket = t.cod_ticket
+	JOIN LOS_CRUD.Caja c ON t.cod_caja = c.cod_caja
+	JOIN LOS_CRUD.BI_SUCURSAL s ON s.cod_sucursal = c.cod_sucursal 
+	END
+GO
 
 ---------------- TABLAS DIMENSIONALES ----------------
 
@@ -490,8 +513,15 @@ CREATE TABLE LOS_CRUD.BI_PromocionAplicada (
 	cod_categoria INT FOREIGN KEY REFERENCES LOS_CRUD.BI_CATEGORIA_PRODUCTO,
 	descuento_aplicado DECIMAL(10,2),
 	cod_tiempo INT FOREIGN KEY REFERENCES LOS_CRUD.BI_TIEMPO
-)
+);
 
+CREATE TABLE LOS_CRUD.BI_Envios(
+	cod_sucursal INT FOREIGN KEY REFERENCES LOS_CRUD.BI_SUCURSAL,
+	anio_fecha_programada_envio INT,
+	mes_fecha_programada_envio INT,
+	anio_fecha_entrega_envio INT,
+	mes_fecha_entrega_envio INT
+);
 
 ---------------- EXECUTES ----------------
 
@@ -517,6 +547,8 @@ EXEC LOS_CRUD.MIGRAR_BI_TIPO_CAJA;
 EXEC LOS_CRUD.MIGRAR_BI_TICKETS;
 
 EXEC LOS_CRUD.MIGRAR_BI_PROMOCION_APLICADA;
+
+EXEC LOS_CRUD.MIGRAR_BI_ENVIOS;
 
 Print 'Executes realizados'
 GO
@@ -625,7 +657,18 @@ FROM CTE_CategoriasDescuento
 WHERE rn <= 3;
 GO
 
-
+--7 
+CREATE VIEW LOS_CRUD.BI_PorcentajeCumplimientoEnvios AS
+	SELECT 
+	s.nombre_sucursal,
+	COUNT(*)/COUNT(mes_fecha_entrega_envio)*100 AS porcentaje_envios_cumplidos,
+	e.anio_fecha_programada_envio AS anio,
+	e.mes_fecha_programada_envio AS mes
+	FROM LOS_CRUD.BI_Envios e
+	JOIN LOS_CRUD.BI_SUCURSAL s ON e.cod_sucursal = s.cod_sucursal
+	WHERE e.mes_fecha_entrega_envio <= e.mes_fecha_programada_envio AND e.anio_fecha_entrega_envio <= e.anio_fecha_programada_envio
+	GROUP BY s.nombre_sucursal, e.anio_fecha_programada_envio, e.mes_fecha_programada_envio
+GO
 
 ---------------- SELECTS DE LAS VISTAS ----------------
 SELECT * from LOS_CRUD.BI_TicketPromedioMensual 	
@@ -640,7 +683,8 @@ ORDER BY Cuatrimestre, Edad, Tipo_caja, Anio, PorcentajeAnualDeVentas;
 SELECT * from LOS_CRUD.BI_VentasPorTurno
 ORDER BY Turno, Localidad, Anio, Mes;
 
-
 SELECT * from LOS_CRUD.BI_PorcentajeDescuentoTicket
 
 SELECT * from LOS_CRUD.BI_CategoriasMayorDescuento
+
+SELECT * FROM LOS_CRUD.BI_PorcentajeCumplimientoEnvios
