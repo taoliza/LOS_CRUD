@@ -484,17 +484,23 @@ BEGIN
 END
 GO
 
-
-
-
-
 --Reglas
 CREATE PROCEDURE LOS_CRUD.MigrarReglas
 AS
 BEGIN
-    INSERT INTO LOS_CRUD.Reglas (descripcion_regla)
-    SELECT DISTINCT 
-        REGLA_DESCRIPCION
+    INSERT INTO LOS_CRUD.Reglas (cod_promocion, aplica_misma_marca,
+								aplica_mismo_prod, cant_aplica_descuento,
+								cant_aplicable_regla, descripcion_regla,
+								descuento_aplicable_regla, cantidad_max_prod)
+    SELECT DISTINCT
+		PROMO_CODIGO,
+		REGLA_APLICA_MISMA_MARCA,
+		REGLA_APLICA_MISMO_PROD,
+		REGLA_CANT_APLICA_DESCUENTO,
+		REGLA_CANT_APLICABLE_REGLA,
+        REGLA_DESCRIPCION,
+		REGLA_DESCUENTO_APLICABLE_PROD,
+		REGLA_CANT_MAX_PROD
     FROM gd_esquema.Maestra
     WHERE REGLA_DESCRIPCION IS NOT NULL;
 END
