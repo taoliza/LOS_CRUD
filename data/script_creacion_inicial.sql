@@ -1,7 +1,5 @@
 USE [GD1C2024]
 GO
-CREATE SCHEMA [LOS_CRUD]
-GO
 
 --Drops procedures
 IF EXISTS(SELECT [name] FROM sys.procedures WHERE [name] = 'MigrarProvincias')
@@ -805,6 +803,13 @@ ON LOS_CRUD.Producto(cod_producto);
 
 CREATE INDEX IDX_TICKET
 ON LOS_CRUD.Ticket(cod_ticket);
+
+CREATE INDEX IDX_TICKET_DETALLE
+ON LOS_CRUD.TicketDetalle(cod_ticket_detalle);
+
+CREATE INDEX IDX_PROMOCION
+ON LOS_CRUD.Promocion(cod_promocion);
+
 
 
 -- Ejecucion de los Stored Procedures

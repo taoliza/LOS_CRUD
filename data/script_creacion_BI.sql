@@ -106,7 +106,8 @@ IF EXISTS(SELECT [name] FROM sys.procedures WHERE [name] = 'MIGRAR_BI_ENVIOS')
 IF EXISTS(SELECT [name] FROM sys.procedures WHERE [name] = 'MIGRAR_BI_PAGOS')
     DROP PROCEDURE LOS_CRUD.MIGRAR_BI_PAGOS;
 
-
+IF EXISTS(SELECT [name] FROM sys.procedures WHERE [name] = 'MIGRAR_BI_MDP')
+    DROP PROCEDURE LOS_CRUD.MIGRAR_BI_MDP;
 GO
 
 
@@ -357,6 +358,16 @@ BEGIN
 	END
 GO
 
+CREATE PROCEDURE LOS_CRUD.MIGRAR_BI_MDP
+AS
+BEGIN
+	INSERT INTO LOS_CRUD.BI_MDP (cod_mdp, desc_mdp)
+		SELECT DISTINCT cod_medio_pago, descripcion_medio_pago
+		FROM LOS_CRUD.MedioPago
+	END
+GO
+
+
 ---------------- MIGRACIONES A TABLAS EXTRAS ----------------
 
 ---------------- MIGRACIONES A HECHOS ----------------
@@ -457,14 +468,14 @@ CREATE PROCEDURE LOS_CRUD.MIGRAR_BI_PAGOS
 		LOS_CRUD.BI_CALCULAR_RANGO_ETARIO(cli.fecha_nacimiento_cliente) as cod_rango_etario_cliente,
 		p.importe_pago,
 		p.cuotas_tarjeta,
-		mp.descripcion_medio_pago,
+		mp.cod_mdp,
 		p.monto_descontado
 	FROM LOS_CRUD.Pago p
 	JOIN LOS_CRUD.Ticket t ON p.cod_ticket = t.cod_ticket
 	JOIN LOS_CRUD.Caja c ON t.cod_caja = c.cod_caja
 	JOIN LOS_CRUD.BI_SUCURSAL s ON s.cod_sucursal = c.cod_sucursal 
 	JOIN LOS_CRUD.BI_TIEMPO bt ON YEAR(p.fecha_pago) = bt.tiempo_anio AND MONTH(p.fecha_pago) = bt.tiempo_mes
-	JOIN LOS_CRUD.MedioPago mp ON mp.cod_medio_pago = p.cod_medio_pago
+	JOIN LOS_CRUD.BI_MDP mp ON mp.cod_mdp = p.cod_medio_pago
 	JOIN LOS_CRUD.Cliente cli ON t.cod_cliente = cli.cod_cliente
 	END
 GO
@@ -580,12 +591,13 @@ CREATE TABLE LOS_CRUD.BI_Pagos(
 	cod_rango_etario_cliente INT FOREIGN KEY REFERENCES LOS_CRUD.BI_RANGO_ETARIO,
 	importe_pago DECIMAL(10,2),
 	cuotas_tarjeta INT,
-	desc_medio_pago VARCHAR(255),
+	cod_mdp VARCHAR(255) FOREIGN KEY REFERENCES LOS_CRUD.BI_MDP,
 	monto_descontado DECIMAL(10,2)
 )
 
 ---------------- EXECUTES ----------------
 
+EXEC LOS_CRUD.MIGRAR_BI_MDP;
 
 EXEC LOS_CRUD.MIGRAR_BI_UBICACION;
 
@@ -757,7 +769,7 @@ GO
 
 --10 
 CREATE VIEW LOS_CRUD.BI_SucursalesConMayorImporteDePagosEnCuotas AS
-	SELECT 
+	SELECT
 	s.nombre_sucursal,
 	p.desc_medio_pago as  medio_pago,
 	t.tiempo_anio as anio,
