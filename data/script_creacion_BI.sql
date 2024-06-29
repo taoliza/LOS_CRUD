@@ -131,6 +131,9 @@ IF EXISTS (SELECT [name] FROM sys.views WHERE [name] = 'BI_PorcentajeCumplimient
 IF EXISTS (SELECT [name] FROM sys.views WHERE [name] = 'BI_CantidadDeEnviosRangoEtarioCliente')
     DROP VIEW LOS_CRUD.BI_CantidadDeEnviosRangoEtarioCliente; 
 
+IF EXISTS (SELECT [name] FROM sys.views WHERE [name] = 'BI_LocalidadesConMayorCosto')
+    DROP VIEW LOS_CRUD.BI_LocalidadesConMayorCosto; 
+
 GO
 ---------------- FUNCIONES ----------------
 
@@ -411,7 +414,7 @@ CREATE PROCEDURE LOS_CRUD.MIGRAR_BI_ENVIOS
     INSERT INTO LOS_CRUD.BI_Envios (cod_sucursal, cod_ubicacion,
 									cod_rango_etario_cliente, anio_fecha_programada_envio,
 									mes_fecha_programada_envio, anio_fecha_entrega_envio,
-									mes_fecha_entrega_envio)
+									mes_fecha_entrega_envio, costo_envio)
 	SELECT 
 		s.cod_sucursal,
 		u.cod_ubicacion,
@@ -419,7 +422,8 @@ CREATE PROCEDURE LOS_CRUD.MIGRAR_BI_ENVIOS
 		YEAR(e.fecha_programada_envio),
 		MONTH(e.fecha_programada_envio),
 		YEAR(e.fecha_entrega_envio),
-		MONTH(e.fecha_entrega_envio)
+		MONTH(e.fecha_entrega_envio),
+		e.costo_envio
 	FROM LOS_CRUD.Envio e
 	JOIN LOS_CRUD.Ticket t ON e.cod_ticket = t.cod_ticket
 	JOIN LOS_CRUD.Caja c ON t.cod_caja = c.cod_caja
@@ -531,7 +535,8 @@ CREATE TABLE LOS_CRUD.BI_Envios(
 	anio_fecha_programada_envio INT,
 	mes_fecha_programada_envio INT,
 	anio_fecha_entrega_envio INT,
-	mes_fecha_entrega_envio INT
+	mes_fecha_entrega_envio INT,
+	costo_envio DECIMAL(18,2)
 );
 
 ---------------- EXECUTES ----------------
@@ -694,6 +699,15 @@ CREATE VIEW LOS_CRUD.BI_CantidadDeEnviosRangoEtarioCliente AS
 	GROUP BY re.desc_rango_etario, t.tiempo_anio, t.tiempo_cuatrimestre
 GO
 
+--9
+CREATE VIEW LOS_CRUD.BI_LocalidadesConMayorCosto AS
+	SELECT 
+	u.desc_ubicacion AS localidad,
+	e.costo_envio
+	FROM LOS_CRUD.BI_Envios e
+	JOIN LOS_CRUD.BI_UBICACION u ON e.cod_ubicacion = u.cod_ubicacion
+GO
+
 ---------------- SELECTS DE LAS VISTAS ----------------
 SELECT * from LOS_CRUD.BI_TicketPromedioMensual 	
 ORDER BY Anio, Mes;
@@ -715,3 +729,6 @@ SELECT * FROM LOS_CRUD.BI_PorcentajeCumplimientoEnvios
 
 SELECT * FROM LOS_CRUD.BI_CantidadDeEnviosRangoEtarioCliente 
 ORDER BY rango_etario_cliente, cuatrimestre
+
+SELECT TOP 5 * FROM LOS_CRUD.BI_LocalidadesConMayorCosto 
+ORDER BY costo_envio DESC
