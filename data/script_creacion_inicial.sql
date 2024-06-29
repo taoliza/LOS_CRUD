@@ -1,5 +1,7 @@
 USE [GD1C2024]
 GO
+CREATE SCHEMA [LOS_CRUD]
+GO
 
 --Drops procedures
 IF EXISTS(SELECT [name] FROM sys.procedures WHERE [name] = 'MigrarProvincias')
