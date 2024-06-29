@@ -144,6 +144,9 @@ IF EXISTS (SELECT [name] FROM sys.views WHERE [name] = 'BI_SucursalesConMayorImp
 
 IF EXISTS (SELECT [name] FROM sys.views WHERE [name] = 'BI_PromedioImporteDeCuota')
     DROP VIEW LOS_CRUD.BI_PromedioImporteDeCuota; 
+
+IF EXISTS (SELECT [name] FROM sys.views WHERE [name] = 'BI_PorcentajeDescuentoAplicadoPorMedioDePago')
+    DROP VIEW LOS_CRUD.BI_PorcentajeDescuentoAplicadoPorMedioDePago; 
 GO
 
 ---------------- FUNCIONES ----------------
@@ -447,14 +450,15 @@ GO
 CREATE PROCEDURE LOS_CRUD.MIGRAR_BI_PAGOS
  AS
   BEGIN
-    INSERT INTO LOS_CRUD.BI_Pagos (cod_sucursal, cod_tiempo, cod_rango_etario_cliente, importe_pago, cuotas_tarjeta, desc_medio_pago)
+    INSERT INTO LOS_CRUD.BI_Pagos (cod_sucursal, cod_tiempo, cod_rango_etario_cliente, importe_pago, cuotas_tarjeta, desc_medio_pago, monto_descontado)
 	SELECT 
 		s.cod_sucursal,
 		bt.cod_tiempo,
 		LOS_CRUD.BI_CALCULAR_RANGO_ETARIO(cli.fecha_nacimiento_cliente) as cod_rango_etario_cliente,
 		p.importe_pago,
 		p.cuotas_tarjeta,
-		mp.descripcion_medio_pago
+		mp.descripcion_medio_pago,
+		p.monto_descontado
 	FROM LOS_CRUD.Pago p
 	JOIN LOS_CRUD.Ticket t ON p.cod_ticket = t.cod_ticket
 	JOIN LOS_CRUD.Caja c ON t.cod_caja = c.cod_caja
@@ -576,7 +580,8 @@ CREATE TABLE LOS_CRUD.BI_Pagos(
 	cod_rango_etario_cliente INT FOREIGN KEY REFERENCES LOS_CRUD.BI_RANGO_ETARIO,
 	importe_pago DECIMAL(10,2),
 	cuotas_tarjeta INT,
-	desc_medio_pago VARCHAR(255)
+	desc_medio_pago VARCHAR(255),
+	monto_descontado DECIMAL(10,2)
 )
 
 ---------------- EXECUTES ----------------
@@ -775,6 +780,18 @@ CREATE VIEW LOS_CRUD.BI_PromedioImporteDeCuota AS
 	WHERE p.cuotas_tarjeta IS NOT NULL
 	GROUP BY re.desc_rango_etario
 GO
+
+--12
+CREATE VIEW LOS_CRUD.BI_PorcentajeDescuentoAplicadoPorMedioDePago AS
+	SELECT 
+	p.desc_medio_pago as medio_de_pago,
+	t.tiempo_cuatrimestre as cuatrimestre,
+	SUM(p.monto_descontado) / SUM(p.monto_descontado + p.importe_pago) * 100 as porcentaje_descuento 
+	FROM LOS_CRUD.BI_Pagos p
+	JOIN LOS_CRUD.BI_TIEMPO t ON p.cod_tiempo = t.cod_tiempo
+	WHERE p.cuotas_tarjeta IS NOT NULL
+	GROUP BY p.desc_medio_pago, t.tiempo_cuatrimestre
+GO
 ---------------- SELECTS DE LAS VISTAS ----------------
 SELECT * from LOS_CRUD.BI_TicketPromedioMensual 	
 ORDER BY Anio, Mes;
@@ -803,4 +820,7 @@ ORDER BY costo_envio DESC
 SELECT TOP 3 * FROM LOS_CRUD.BI_SucursalesConMayorImporteDePagosEnCuotas
 ORDER BY importe_de_pagos DESC
 
-SELECT * FROM LOS_CRUD.BI_PromedioImporteDeCuota
+SELECT * FROM LOS_CRUD.BI_PromedioImporteDeCuota	
+
+SELECT * FROM LOS_CRUD.BI_PorcentajeDescuentoAplicadoPorMedioDePago
+ORDER BY medio_de_pago, cuatrimestre
