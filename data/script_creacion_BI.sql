@@ -128,6 +128,8 @@ IF EXISTS (SELECT [name] FROM sys.views WHERE [name] = 'BI_CategoriasMayorDescue
 IF EXISTS (SELECT [name] FROM sys.views WHERE [name] = 'BI_PorcentajeCumplimientoEnvios')
     DROP VIEW LOS_CRUD.BI_PorcentajeCumplimientoEnvios; 
 
+IF EXISTS (SELECT [name] FROM sys.views WHERE [name] = 'BI_CantidadDeEnviosRangoEtarioCliente')
+    DROP VIEW LOS_CRUD.BI_CantidadDeEnviosRangoEtarioCliente; 
 
 GO
 ---------------- FUNCIONES ----------------
@@ -406,9 +408,14 @@ GO
 CREATE PROCEDURE LOS_CRUD.MIGRAR_BI_ENVIOS
  AS
   BEGIN
-    INSERT INTO LOS_CRUD.BI_Envios (cod_sucursal, anio_fecha_programada_envio, mes_fecha_programada_envio, anio_fecha_entrega_envio, mes_fecha_entrega_envio)
+    INSERT INTO LOS_CRUD.BI_Envios (cod_sucursal, cod_ubicacion,
+									cod_rango_etario_cliente, anio_fecha_programada_envio,
+									mes_fecha_programada_envio, anio_fecha_entrega_envio,
+									mes_fecha_entrega_envio)
 	SELECT 
 		s.cod_sucursal,
+		u.cod_ubicacion,
+		LOS_CRUD.BI_CALCULAR_RANGO_ETARIO(cli.fecha_nacimiento_cliente) as cod_rango_etario_cliente,
 		YEAR(e.fecha_programada_envio),
 		MONTH(e.fecha_programada_envio),
 		YEAR(e.fecha_entrega_envio),
@@ -417,6 +424,8 @@ CREATE PROCEDURE LOS_CRUD.MIGRAR_BI_ENVIOS
 	JOIN LOS_CRUD.Ticket t ON e.cod_ticket = t.cod_ticket
 	JOIN LOS_CRUD.Caja c ON t.cod_caja = c.cod_caja
 	JOIN LOS_CRUD.BI_SUCURSAL s ON s.cod_sucursal = c.cod_sucursal 
+	JOIN LOS_CRUD.Cliente cli ON t.cod_cliente = cli.cod_cliente
+	JOIN LOS_CRUD.BI_UBICACION u ON LOS_CRUD.BI_CALCULAR_UBICACION(cli.cod_localidad) = u.desc_ubicacion
 	END
 GO
 
@@ -517,6 +526,8 @@ CREATE TABLE LOS_CRUD.BI_PromocionAplicada (
 
 CREATE TABLE LOS_CRUD.BI_Envios(
 	cod_sucursal INT FOREIGN KEY REFERENCES LOS_CRUD.BI_SUCURSAL,
+	cod_ubicacion INT FOREIGN KEY REFERENCES LOS_CRUD.BI_UBICACION,
+	cod_rango_etario_cliente INT FOREIGN KEY REFERENCES LOS_CRUD.BI_RANGO_ETARIO,
 	anio_fecha_programada_envio INT,
 	mes_fecha_programada_envio INT,
 	anio_fecha_entrega_envio INT,
@@ -670,6 +681,19 @@ CREATE VIEW LOS_CRUD.BI_PorcentajeCumplimientoEnvios AS
 	GROUP BY s.nombre_sucursal, e.anio_fecha_programada_envio, e.mes_fecha_programada_envio
 GO
 
+--8
+CREATE VIEW LOS_CRUD.BI_CantidadDeEnviosRangoEtarioCliente AS
+	SELECT 
+	re.desc_rango_etario as rango_etario_cliente,
+	t.tiempo_anio as anio,
+	t.tiempo_cuatrimestre as cuatrimestre,
+	COUNT(*) AS Cantidad_envios
+	FROM LOS_CRUD.BI_Envios e
+	JOIN LOS_CRUD.BI_RANGO_ETARIO re ON e.cod_rango_etario_cliente = re.cod_rango_etario
+	JOIN LOS_CRUD.BI_TIEMPO t ON e.anio_fecha_programada_envio = t.tiempo_anio AND e.mes_fecha_programada_envio = t.tiempo_mes 
+	GROUP BY re.desc_rango_etario, t.tiempo_anio, t.tiempo_cuatrimestre
+GO
+
 ---------------- SELECTS DE LAS VISTAS ----------------
 SELECT * from LOS_CRUD.BI_TicketPromedioMensual 	
 ORDER BY Anio, Mes;
@@ -688,3 +712,6 @@ SELECT * from LOS_CRUD.BI_PorcentajeDescuentoTicket
 SELECT * from LOS_CRUD.BI_CategoriasMayorDescuento
 
 SELECT * FROM LOS_CRUD.BI_PorcentajeCumplimientoEnvios
+
+SELECT * FROM LOS_CRUD.BI_CantidadDeEnviosRangoEtarioCliente 
+ORDER BY rango_etario_cliente, cuatrimestre
