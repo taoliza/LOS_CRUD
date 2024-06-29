@@ -27,6 +27,9 @@ IF EXISTS(SELECT [name] FROM sys.tables WHERE [name] = 'BI_PromocionAplicada')
 IF EXISTS(SELECT [name] FROM sys.tables WHERE [name] = 'BI_Envios')
     DROP TABLE LOS_CRUD.BI_Envios;
 
+IF EXISTS(SELECT [name] FROM sys.tables WHERE [name] = 'BI_Pagos')
+    DROP TABLE LOS_CRUD.BI_Pagos;
+
 IF EXISTS(SELECT [name] FROM sys.tables WHERE [name] = 'BI_TIEMPO')
     DROP TABLE LOS_CRUD.BI_TIEMPO;
 
@@ -100,6 +103,8 @@ IF EXISTS(SELECT [name] FROM sys.procedures WHERE [name] = 'MIGRAR_BI_TIPO_CAJA'
 IF EXISTS(SELECT [name] FROM sys.procedures WHERE [name] = 'MIGRAR_BI_ENVIOS')
     DROP PROCEDURE LOS_CRUD.MIGRAR_BI_ENVIOS;
 
+IF EXISTS(SELECT [name] FROM sys.procedures WHERE [name] = 'MIGRAR_BI_PAGOS')
+    DROP PROCEDURE LOS_CRUD.MIGRAR_BI_PAGOS;
 
 
 GO
@@ -134,6 +139,8 @@ IF EXISTS (SELECT [name] FROM sys.views WHERE [name] = 'BI_CantidadDeEnviosRango
 IF EXISTS (SELECT [name] FROM sys.views WHERE [name] = 'BI_LocalidadesConMayorCosto')
     DROP VIEW LOS_CRUD.BI_LocalidadesConMayorCosto; 
 
+IF EXISTS (SELECT [name] FROM sys.views WHERE [name] = 'BI_SucursalesConMayorImporteDePagosEnCuotas')
+    DROP VIEW LOS_CRUD.BI_SucursalesConMayorImporteDePagosEnCuotas; 
 GO
 ---------------- FUNCIONES ----------------
 
@@ -433,6 +440,24 @@ CREATE PROCEDURE LOS_CRUD.MIGRAR_BI_ENVIOS
 	END
 GO
 
+CREATE PROCEDURE LOS_CRUD.MIGRAR_BI_PAGOS
+ AS
+  BEGIN
+    INSERT INTO LOS_CRUD.BI_Pagos (cod_sucursal, cod_tiempo, importe_pago, cuotas_tarjeta, desc_medio_pago)
+	SELECT 
+		s.cod_sucursal,
+		bt.cod_tiempo,
+		p.importe_pago,
+		p.cuotas_tarjeta,
+		mp.descripcion_medio_pago
+	FROM LOS_CRUD.Pago p
+	JOIN LOS_CRUD.Ticket t ON p.cod_ticket = t.cod_ticket
+	JOIN LOS_CRUD.Caja c ON t.cod_caja = c.cod_caja
+	JOIN LOS_CRUD.BI_SUCURSAL s ON s.cod_sucursal = c.cod_sucursal 
+	JOIN LOS_CRUD.BI_TIEMPO bt ON YEAR(p.fecha_pago) = bt.tiempo_anio AND MONTH(p.fecha_pago) = bt.tiempo_mes
+	JOIN LOS_CRUD.MedioPago mp ON mp.cod_medio_pago = p.cod_medio_pago
+	END
+GO
 ---------------- TABLAS DIMENSIONALES ----------------
 
 CREATE TABLE LOS_CRUD.BI_TIEMPO(
@@ -539,6 +564,14 @@ CREATE TABLE LOS_CRUD.BI_Envios(
 	costo_envio DECIMAL(18,2)
 );
 
+CREATE TABLE LOS_CRUD.BI_Pagos(
+	cod_sucursal INT FOREIGN KEY REFERENCES LOS_CRUD.BI_SUCURSAL,
+	cod_tiempo INT,
+	importe_pago DECIMAL(10,2),
+	cuotas_tarjeta INT,
+	desc_medio_pago VARCHAR(255)
+)
+
 ---------------- EXECUTES ----------------
 
 
@@ -565,6 +598,8 @@ EXEC LOS_CRUD.MIGRAR_BI_TICKETS;
 EXEC LOS_CRUD.MIGRAR_BI_PROMOCION_APLICADA;
 
 EXEC LOS_CRUD.MIGRAR_BI_ENVIOS;
+
+EXEC LOS_CRUD.MIGRAR_BI_PAGOS;
 
 Print 'Executes realizados'
 GO
@@ -708,6 +743,20 @@ CREATE VIEW LOS_CRUD.BI_LocalidadesConMayorCosto AS
 	JOIN LOS_CRUD.BI_UBICACION u ON e.cod_ubicacion = u.cod_ubicacion
 GO
 
+--10 
+CREATE VIEW LOS_CRUD.BI_SucursalesConMayorImporteDePagosEnCuotas AS
+	SELECT 
+	s.nombre_sucursal,
+	p.desc_medio_pago as  medio_pago,
+	t.tiempo_anio as anio,
+	t.tiempo_mes as mes,
+	SUM(p.importe_pago) as importe_de_pagos
+	FROM LOS_CRUD.BI_Pagos p
+	JOIN LOS_CRUD.BI_SUCURSAL s ON p.cod_sucursal = s.cod_sucursal
+	JOIN LOS_CRUD.BI_TIEMPO t ON p.cod_tiempo = t.cod_tiempo
+	WHERE p.cuotas_tarjeta IS NOT NULL
+	GROUP BY s.nombre_sucursal, p.desc_medio_pago, t.tiempo_anio, t.tiempo_mes
+GO
 ---------------- SELECTS DE LAS VISTAS ----------------
 SELECT * from LOS_CRUD.BI_TicketPromedioMensual 	
 ORDER BY Anio, Mes;
@@ -732,3 +781,6 @@ ORDER BY rango_etario_cliente, cuatrimestre
 
 SELECT TOP 5 * FROM LOS_CRUD.BI_LocalidadesConMayorCosto 
 ORDER BY costo_envio DESC
+
+SELECT TOP 3 * FROM LOS_CRUD.BI_SucursalesConMayorImporteDePagosEnCuotas
+ORDER BY importe_de_pagos DESC
