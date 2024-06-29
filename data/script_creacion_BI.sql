@@ -461,7 +461,7 @@ GO
 CREATE PROCEDURE LOS_CRUD.MIGRAR_BI_PAGOS
  AS
   BEGIN
-    INSERT INTO LOS_CRUD.BI_Pagos (cod_sucursal, cod_tiempo, cod_rango_etario_cliente, importe_pago, cuotas_tarjeta, desc_medio_pago, monto_descontado)
+    INSERT INTO LOS_CRUD.BI_Pagos (cod_sucursal, cod_tiempo, cod_rango_etario_cliente, importe_pago, cuotas_tarjeta, cod_mdp, monto_descontado)
 	SELECT 
 		s.cod_sucursal,
 		bt.cod_tiempo,
@@ -591,7 +591,7 @@ CREATE TABLE LOS_CRUD.BI_Pagos(
 	cod_rango_etario_cliente INT FOREIGN KEY REFERENCES LOS_CRUD.BI_RANGO_ETARIO,
 	importe_pago DECIMAL(10,2),
 	cuotas_tarjeta INT,
-	cod_mdp VARCHAR(255) FOREIGN KEY REFERENCES LOS_CRUD.BI_MDP,
+	cod_mdp INT FOREIGN KEY REFERENCES LOS_CRUD.BI_MDP,
 	monto_descontado DECIMAL(10,2)
 )
 
@@ -771,15 +771,16 @@ GO
 CREATE VIEW LOS_CRUD.BI_SucursalesConMayorImporteDePagosEnCuotas AS
 	SELECT
 	s.nombre_sucursal,
-	p.desc_medio_pago as  medio_pago,
+	mp.desc_mdp as  medio_pago,
 	t.tiempo_anio as anio,
 	t.tiempo_mes as mes,
 	SUM(p.importe_pago) as importe_de_pagos
 	FROM LOS_CRUD.BI_Pagos p
+	JOIN LOS_CRUD.BI_MDP mp ON mp.cod_mdp = p.cod_mdp
 	JOIN LOS_CRUD.BI_SUCURSAL s ON p.cod_sucursal = s.cod_sucursal
 	JOIN LOS_CRUD.BI_TIEMPO t ON p.cod_tiempo = t.cod_tiempo
 	WHERE p.cuotas_tarjeta IS NOT NULL
-	GROUP BY s.nombre_sucursal, p.desc_medio_pago, t.tiempo_anio, t.tiempo_mes
+	GROUP BY s.nombre_sucursal, mp.desc_mdp, t.tiempo_anio, t.tiempo_mes
 GO
 
 --11
@@ -796,13 +797,14 @@ GO
 --12
 CREATE VIEW LOS_CRUD.BI_PorcentajeDescuentoAplicadoPorMedioDePago AS
 	SELECT 
-	p.desc_medio_pago as medio_de_pago,
+	mp.desc_mdp as medio_de_pago,
 	t.tiempo_cuatrimestre as cuatrimestre,
 	SUM(p.monto_descontado) / SUM(p.monto_descontado + p.importe_pago) * 100 as porcentaje_descuento 
 	FROM LOS_CRUD.BI_Pagos p
+	JOIN LOS_CRUD.BI_MDP mp ON mp.cod_mdp = p.cod_mdp
 	JOIN LOS_CRUD.BI_TIEMPO t ON p.cod_tiempo = t.cod_tiempo
 	WHERE p.cuotas_tarjeta IS NOT NULL
-	GROUP BY p.desc_medio_pago, t.tiempo_cuatrimestre
+	GROUP BY mp.desc_mdp, t.tiempo_cuatrimestre
 GO
 ---------------- SELECTS DE LAS VISTAS ----------------
 SELECT * from LOS_CRUD.BI_TicketPromedioMensual 	
