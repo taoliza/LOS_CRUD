@@ -141,7 +141,11 @@ IF EXISTS (SELECT [name] FROM sys.views WHERE [name] = 'BI_LocalidadesConMayorCo
 
 IF EXISTS (SELECT [name] FROM sys.views WHERE [name] = 'BI_SucursalesConMayorImporteDePagosEnCuotas')
     DROP VIEW LOS_CRUD.BI_SucursalesConMayorImporteDePagosEnCuotas; 
+
+IF EXISTS (SELECT [name] FROM sys.views WHERE [name] = 'BI_PromedioImporteDeCuota')
+    DROP VIEW LOS_CRUD.BI_PromedioImporteDeCuota; 
 GO
+
 ---------------- FUNCIONES ----------------
 
 --Rango Etario
@@ -443,10 +447,11 @@ GO
 CREATE PROCEDURE LOS_CRUD.MIGRAR_BI_PAGOS
  AS
   BEGIN
-    INSERT INTO LOS_CRUD.BI_Pagos (cod_sucursal, cod_tiempo, importe_pago, cuotas_tarjeta, desc_medio_pago)
+    INSERT INTO LOS_CRUD.BI_Pagos (cod_sucursal, cod_tiempo, cod_rango_etario_cliente, importe_pago, cuotas_tarjeta, desc_medio_pago)
 	SELECT 
 		s.cod_sucursal,
 		bt.cod_tiempo,
+		LOS_CRUD.BI_CALCULAR_RANGO_ETARIO(cli.fecha_nacimiento_cliente) as cod_rango_etario_cliente,
 		p.importe_pago,
 		p.cuotas_tarjeta,
 		mp.descripcion_medio_pago
@@ -456,6 +461,7 @@ CREATE PROCEDURE LOS_CRUD.MIGRAR_BI_PAGOS
 	JOIN LOS_CRUD.BI_SUCURSAL s ON s.cod_sucursal = c.cod_sucursal 
 	JOIN LOS_CRUD.BI_TIEMPO bt ON YEAR(p.fecha_pago) = bt.tiempo_anio AND MONTH(p.fecha_pago) = bt.tiempo_mes
 	JOIN LOS_CRUD.MedioPago mp ON mp.cod_medio_pago = p.cod_medio_pago
+	JOIN LOS_CRUD.Cliente cli ON t.cod_cliente = cli.cod_cliente
 	END
 GO
 ---------------- TABLAS DIMENSIONALES ----------------
@@ -566,7 +572,8 @@ CREATE TABLE LOS_CRUD.BI_Envios(
 
 CREATE TABLE LOS_CRUD.BI_Pagos(
 	cod_sucursal INT FOREIGN KEY REFERENCES LOS_CRUD.BI_SUCURSAL,
-	cod_tiempo INT,
+	cod_tiempo INT FOREIGN KEY REFERENCES LOS_CRUD.BI_TIEMPO,
+	cod_rango_etario_cliente INT FOREIGN KEY REFERENCES LOS_CRUD.BI_RANGO_ETARIO,
 	importe_pago DECIMAL(10,2),
 	cuotas_tarjeta INT,
 	desc_medio_pago VARCHAR(255)
@@ -757,6 +764,17 @@ CREATE VIEW LOS_CRUD.BI_SucursalesConMayorImporteDePagosEnCuotas AS
 	WHERE p.cuotas_tarjeta IS NOT NULL
 	GROUP BY s.nombre_sucursal, p.desc_medio_pago, t.tiempo_anio, t.tiempo_mes
 GO
+
+--11
+CREATE VIEW LOS_CRUD.BI_PromedioImporteDeCuota AS
+	SELECT 
+	re.desc_rango_etario as rango_etario_cliente,
+	SUM(p.importe_pago/p.cuotas_tarjeta) / COUNT(*) as promedio_importe_de_cuota
+	FROM LOS_CRUD.BI_Pagos p
+	JOIN LOS_CRUD.BI_RANGO_ETARIO re ON p.cod_rango_etario_cliente = re.cod_rango_etario
+	WHERE p.cuotas_tarjeta IS NOT NULL
+	GROUP BY re.desc_rango_etario
+GO
 ---------------- SELECTS DE LAS VISTAS ----------------
 SELECT * from LOS_CRUD.BI_TicketPromedioMensual 	
 ORDER BY Anio, Mes;
@@ -784,3 +802,5 @@ ORDER BY costo_envio DESC
 
 SELECT TOP 3 * FROM LOS_CRUD.BI_SucursalesConMayorImporteDePagosEnCuotas
 ORDER BY importe_de_pagos DESC
+
+SELECT * FROM LOS_CRUD.BI_PromedioImporteDeCuota
