@@ -422,13 +422,14 @@ GO
 CREATE PROCEDURE LOS_CRUD.MigrarPromocion
 AS
 BEGIN
-    INSERT INTO LOS_CRUD.Promocion (descripcion_promocion, fecha_inicio, fecha_fin)
+    INSERT INTO LOS_CRUD.Promocion (cod_promocion, descripcion_promocion, fecha_inicio, fecha_fin)
     SELECT DISTINCT 
+		gm.PROMO_CODIGO,
         gm.PROMOCION_DESCRIPCION, 
         gm.PROMOCION_FECHA_INICIO, 
         gm.PROMOCION_FECHA_FIN
     FROM gd_esquema.Maestra gm
-    WHERE PROMOCION_DESCRIPCION IS NOT NULL;
+    WHERE PROMO_CODIGO IS NOT NULL;
 END
 GO
 
@@ -491,12 +492,11 @@ GO
 CREATE PROCEDURE LOS_CRUD.MigrarReglas
 AS
 BEGIN
-    INSERT INTO LOS_CRUD.Reglas (cod_promocion, aplica_misma_marca,
+    INSERT INTO LOS_CRUD.Reglas (aplica_misma_marca,
 								aplica_mismo_prod, cant_aplica_descuento,
 								cant_aplicable_regla, descripcion_regla,
 								descuento_aplicable_regla, cantidad_max_prod)
     SELECT DISTINCT
-		p.cod_promocion,
 		REGLA_APLICA_MISMA_MARCA,
 		REGLA_APLICA_MISMO_PROD,
 		REGLA_CANT_APLICA_DESCUENTO,
@@ -709,7 +709,7 @@ CREATE TABLE LOS_CRUD.Pago (
 
 -- Crear tabla Promocion
 CREATE TABLE LOS_CRUD.Promocion (
-    cod_promocion INT IDENTITY(1,1) PRIMARY KEY,
+    cod_promocion INT PRIMARY KEY,
     descripcion_promocion VARCHAR(255) NOT NULL,
     fecha_inicio DATE NOT NULL,
     fecha_fin DATE NOT NULL
@@ -777,15 +777,13 @@ CREATE TABLE LOS_CRUD.Super (
 -- Crear tabla Reglas
 CREATE TABLE LOS_CRUD.Reglas (
     cod_regla INT IDENTITY(1,1) PRIMARY KEY,
-    cod_promocion INT,
     aplica_misma_marca INT,
     aplica_mismo_prod INT,
     cant_aplica_descuento INT,
     cant_aplicable_regla INT,
     descripcion_regla VARCHAR(255),
     descuento_aplicable_regla DECIMAL(5, 2),
-    cantidad_max_prod INT,
-    FOREIGN KEY (cod_promocion) REFERENCES LOS_CRUD.Promocion(cod_promocion)
+    cantidad_max_prod INT
 );
 
 -- Crear tabla PromocionReglas
