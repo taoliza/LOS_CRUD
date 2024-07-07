@@ -58,26 +58,24 @@ GO
 --Drops tablas
 IF EXISTS(SELECT [name] FROM sys.tables WHERE [name] = 'PromocionReglas')
     DROP TABLE LOS_CRUD.PromocionReglas;
-IF EXISTS(SELECT [name] FROM sys.tables WHERE [name] = 'Reglas')
-    DROP TABLE LOS_CRUD.Reglas;
 IF EXISTS(SELECT [name] FROM sys.tables WHERE [name] = 'Super')
     DROP TABLE LOS_CRUD.Super;
-IF EXISTS(SELECT [name] FROM sys.tables WHERE [name] = 'TicketDetalle')
-    DROP TABLE LOS_CRUD.TicketDetalle;
 IF EXISTS(SELECT [name] FROM sys.tables WHERE [name] = 'Descuento')
     DROP TABLE LOS_CRUD.Descuento;    
 IF EXISTS(SELECT [name] FROM sys.tables WHERE [name] = 'PromocionAplicada')
     DROP TABLE LOS_CRUD.PromocionAplicada;
+IF EXISTS(SELECT [name] FROM sys.tables WHERE [name] = 'TicketDetalle')
+    DROP TABLE LOS_CRUD.TicketDetalle;
 IF EXISTS(SELECT [name] FROM sys.tables WHERE [name] = 'PromocionProducto')
     DROP TABLE LOS_CRUD.PromocionProducto;
-IF EXISTS(SELECT [name] FROM sys.tables WHERE [name] = 'Promocion')
-    DROP TABLE LOS_CRUD.Promocion;
 IF EXISTS(SELECT [name] FROM sys.tables WHERE [name] = 'Pago')
     DROP TABLE LOS_CRUD.Pago;
 IF EXISTS(SELECT [name] FROM sys.tables WHERE [name] = 'Envio')
     DROP TABLE LOS_CRUD.Envio;
 IF EXISTS(SELECT [name] FROM sys.tables WHERE [name] = 'Ticket')
     DROP TABLE LOS_CRUD.Ticket;
+IF EXISTS(SELECT [name] FROM sys.tables WHERE [name] = 'Promocion')
+    DROP TABLE LOS_CRUD.Promocion;
 IF EXISTS(SELECT [name] FROM sys.tables WHERE [name] = 'Empleado')
     DROP TABLE LOS_CRUD.Empleado;
 IF EXISTS(SELECT [name] FROM sys.tables WHERE [name] = 'TipoDeComprobante')
@@ -104,6 +102,8 @@ IF EXISTS(SELECT [name] FROM sys.tables WHERE [name] = 'Localidad')
     DROP TABLE LOS_CRUD.Localidad;
 IF EXISTS(SELECT [name] FROM sys.tables WHERE [name] = 'Provincia')
     DROP TABLE LOS_CRUD.Provincia;
+IF EXISTS(SELECT [name] FROM sys.tables WHERE [name] = 'Reglas')
+    DROP TABLE LOS_CRUD.Reglas;
 GO
 
 -- MIGRACION DE DATOS --
@@ -366,11 +366,11 @@ BEGIN
     LEFT JOIN LOS_CRUD.Empleado e ON gm.EMPLEADO_DNI = e.dni_empleado
     LEFT JOIN LOS_CRUD.CLIENTE cli ON gm.CLIENTE_DNI = cli.dni_cliente
     WHERE TICKET_FECHA_HORA IS NOT NULL
-    GROUP BY gm.TICKET_NUMERO
-    ORDER BY TICKET_NUMERO;
-
-END
+    GROUP BY gm.TICKET_NUMERO, gm.SUCURSAL_NOMBRE
+    ORDER BY gm.TICKET_NUMERO, gm.SUCURSAL_NOMBRE
+	END
 GO
+
 
 --Envio 
 CREATE PROCEDURE LOS_CRUD.MigrarEnvio
@@ -418,17 +418,40 @@ BEGIN
 END
 GO
 
+--Reglas
+CREATE PROCEDURE LOS_CRUD.MigrarReglas
+AS
+BEGIN
+    INSERT INTO LOS_CRUD.Reglas (aplica_misma_marca,
+								aplica_mismo_prod, cant_aplica_descuento,
+								cant_aplicable_regla, descripcion_regla,
+								descuento_aplicable_regla, cantidad_max_prod)
+    SELECT DISTINCT
+		REGLA_APLICA_MISMA_MARCA,
+		REGLA_APLICA_MISMO_PROD,
+		REGLA_CANT_APLICA_DESCUENTO,
+		REGLA_CANT_APLICABLE_REGLA,
+        REGLA_DESCRIPCION,
+		REGLA_DESCUENTO_APLICABLE_PROD,
+		REGLA_CANT_MAX_PROD
+    FROM gd_esquema.Maestra gm
+    WHERE REGLA_DESCRIPCION IS NOT NULL;
+END
+GO
+
 --Promocion
 CREATE PROCEDURE LOS_CRUD.MigrarPromocion
 AS
 BEGIN
-    INSERT INTO LOS_CRUD.Promocion (cod_promocion, descripcion_promocion, fecha_inicio, fecha_fin)
+    INSERT INTO LOS_CRUD.Promocion (cod_promocion, descripcion_promocion, fecha_inicio, fecha_fin, cod_regla)
     SELECT DISTINCT 
 		gm.PROMO_CODIGO,
         gm.PROMOCION_DESCRIPCION, 
         gm.PROMOCION_FECHA_INICIO, 
-        gm.PROMOCION_FECHA_FIN
+        gm.PROMOCION_FECHA_FIN,
+		r.cod_regla
     FROM gd_esquema.Maestra gm
+	JOIN LOS_CRUD.Reglas r ON gm.REGLA_DESCRIPCION = r.descripcion_regla
     WHERE PROMO_CODIGO IS NOT NULL;
 END
 GO
@@ -474,56 +497,21 @@ GO
 CREATE PROCEDURE LOS_CRUD.MigrarPromocionAplicada
 AS
 BEGIN
-    INSERT INTO LOS_CRUD.PromocionAplicada (cod_ticket,cod_producto,cod_promocion, descuento_aplicado)
+    INSERT INTO LOS_CRUD.PromocionAplicada (cod_ticket_detalle,cod_producto,cod_promocion, descuento_aplicado)
     SELECT DISTINCT 
-        t.cod_ticket, 
+        td.cod_ticket_detalle, 
 		td.cod_producto,
         p.cod_promocion,
-		gm.PROMO_APLICADA_DESCUENTO
+		SUM(gm.PROMO_APLICADA_DESCUENTO)
     FROM gd_esquema.Maestra gm
     JOIN LOS_CRUD.Ticket t ON gm.TICKET_NUMERO = t.cod_ticket_old
 	JOIN LOS_CRUD.TicketDetalle td ON td.cod_ticket = t.cod_ticket
     JOIN LOS_CRUD.Promocion p ON gm.PROMO_CODIGO = p.cod_promocion
-    WHERE PROMO_CODIGO IS NOT NULL;
+    WHERE PROMO_CODIGO IS NOT NULL AND gm.PROMO_APLICADA_DESCUENTO > 0.00
+	GROUP BY td.cod_ticket_detalle, td.cod_producto, p.cod_promocion
 END
 GO
 
---Reglas
-CREATE PROCEDURE LOS_CRUD.MigrarReglas
-AS
-BEGIN
-    INSERT INTO LOS_CRUD.Reglas (aplica_misma_marca,
-								aplica_mismo_prod, cant_aplica_descuento,
-								cant_aplicable_regla, descripcion_regla,
-								descuento_aplicable_regla, cantidad_max_prod)
-    SELECT DISTINCT
-		REGLA_APLICA_MISMA_MARCA,
-		REGLA_APLICA_MISMO_PROD,
-		REGLA_CANT_APLICA_DESCUENTO,
-		REGLA_CANT_APLICABLE_REGLA,
-        REGLA_DESCRIPCION,
-		REGLA_DESCUENTO_APLICABLE_PROD,
-		REGLA_CANT_MAX_PROD
-    FROM gd_esquema.Maestra gm
-	JOIN LOS_CRUD.Promocion p ON gm.PROMO_CODIGO = p.cod_promocion
-    WHERE REGLA_DESCRIPCION IS NOT NULL;
-END
-GO
-
---Promocion regla
-CREATE PROCEDURE LOS_CRUD.MigrarPromocionReglas
-AS
-BEGIN
-    INSERT INTO LOS_CRUD.PromocionReglas (cod_promocion, cod_regla)
-    SELECT DISTINCT 
-        p.cod_promocion, 
-        r.cod_regla
-    FROM gd_esquema.Maestra gm
-    JOIN LOS_CRUD.Promocion p ON gm.PROMO_CODIGO = p.cod_promocion
-    JOIN LOS_CRUD.Reglas r ON gm.REGLA_DESCRIPCION = r.descripcion_regla
-    WHERE PROMO_CODIGO IS NOT NULL;
-END
-GO
 
 --Descuento
 CREATE PROCEDURE LOS_CRUD.MigrarDescuento
@@ -707,12 +695,25 @@ CREATE TABLE LOS_CRUD.Pago (
     FOREIGN KEY (cod_medio_pago) REFERENCES LOS_CRUD.MedioPago(cod_medio_pago),
 );
 
+-- Crear tabla Reglas
+CREATE TABLE LOS_CRUD.Reglas (
+    cod_regla INT IDENTITY(1,1) PRIMARY KEY,
+    aplica_misma_marca INT,
+    aplica_mismo_prod INT,
+    cant_aplica_descuento INT,
+    cant_aplicable_regla INT,
+    descripcion_regla VARCHAR(255),
+    descuento_aplicable_regla DECIMAL(5, 2),
+    cantidad_max_prod INT
+);
+
 -- Crear tabla Promocion
 CREATE TABLE LOS_CRUD.Promocion (
     cod_promocion INT PRIMARY KEY,
     descripcion_promocion VARCHAR(255) NOT NULL,
     fecha_inicio DATE NOT NULL,
-    fecha_fin DATE NOT NULL
+    fecha_fin DATE NOT NULL,
+	cod_regla INT FOREIGN KEY REFERENCES LOS_CRUD.Reglas(cod_regla)
 );
 
 -- Crear tabla PromocionProducto
@@ -738,11 +739,11 @@ CREATE TABLE LOS_CRUD.TicketDetalle (
 -- Crear tabla PromocionAplicada
 CREATE TABLE LOS_CRUD.PromocionAplicada (
     cod_promocion_aplicada INT IDENTITY(1,1) PRIMARY KEY,
-    cod_ticket INT,
+    cod_ticket_detalle INT,
     cod_producto INT,
     cod_promocion INT,
     descuento_aplicado DECIMAL(10, 2),
-    FOREIGN KEY (cod_ticket) REFERENCES LOS_CRUD.Ticket(cod_ticket),
+    FOREIGN KEY (cod_ticket_detalle) REFERENCES LOS_CRUD.TicketDetalle(cod_ticket_detalle),
     FOREIGN KEY (cod_producto) REFERENCES LOS_CRUD.Producto(cod_producto),
     FOREIGN KEY (cod_promocion) REFERENCES LOS_CRUD.Promocion(cod_promocion)
 );
@@ -774,26 +775,7 @@ CREATE TABLE LOS_CRUD.Super (
     FOREIGN KEY (cod_Localidad) REFERENCES LOS_CRUD.Localidad(cod_Localidad)
 );
 
--- Crear tabla Reglas
-CREATE TABLE LOS_CRUD.Reglas (
-    cod_regla INT IDENTITY(1,1) PRIMARY KEY,
-    aplica_misma_marca INT,
-    aplica_mismo_prod INT,
-    cant_aplica_descuento INT,
-    cant_aplicable_regla INT,
-    descripcion_regla VARCHAR(255),
-    descuento_aplicable_regla DECIMAL(5, 2),
-    cantidad_max_prod INT
-);
 
--- Crear tabla PromocionReglas
-CREATE TABLE LOS_CRUD.PromocionReglas (
-    cod_promocion INT,
-    cod_regla INT,
-    PRIMARY KEY (cod_promocion, cod_regla),
-    FOREIGN KEY (cod_promocion) REFERENCES LOS_CRUD.Promocion(cod_promocion),
-    FOREIGN KEY (cod_regla) REFERENCES LOS_CRUD.Reglas(cod_regla)
-);
 
 
 -- CREACION DE INDICES 
@@ -827,10 +809,9 @@ EXEC LOS_CRUD.MigrarMarca;
 EXEC LOS_CRUD.MigrarCategoria;
 EXEC LOS_CRUD.MigrarSubCategoria;
 EXEC LOS_CRUD.MigrarProductos;
+EXEC LOS_CRUD.MigrarReglas;
 EXEC LOS_CRUD.MigrarPromocion;
 EXEC LOS_CRUD.MigrarPromocionProducto;
-EXEC LOS_CRUD.MigrarReglas;
-EXEC LOS_CRUD.MigrarPromocionReglas;
 EXEC LOS_CRUD.MigrarMedioPago;
 EXEC LOS_CRUD.MigrarDescuento;
 EXEC LOS_CRUD.MigrarTickets;
@@ -842,3 +823,4 @@ PRINT 'Migracion finalizada exitosamente'
 
 
 GO 
+
