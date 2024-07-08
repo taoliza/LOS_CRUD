@@ -14,6 +14,9 @@ IF EXISTS(SELECT [name] FROM sys.objects WHERE [name] = 'BI_CALCULAR_RANGO_TURNO
 
 IF EXISTS(SELECT [name] FROM sys.objects WHERE [name] = 'BI_CALCULAR_DIA_SEMANA')
     DROP FUNCTION LOS_CRUD.BI_CALCULAR_DIA_SEMANA;
+
+IF EXISTS(SELECT [name] FROM sys.objects WHERE [name] = 'BI_CALCULAR_TIEMPO')
+    DROP FUNCTION LOS_CRUD.BI_CALCULAR_TIEMPO;
 GO
 
 ------------- LIMPIAR TABLAS ------------------------
@@ -244,6 +247,16 @@ BEGIN
 END;
 GO
 
+CREATE FUNCTION LOS_CRUD.BI_CALCULAR_TIEMPO(@FECHA_HORA DATETIME2(3))
+RETURNS INT 
+AS
+BEGIN 
+	DECLARE @cod_tiempo INT
+	SELECT @cod_tiempo = cod_tiempo FROM LOS_CRUD.BI_TIEMPO WHERE YEAR(@FECHA_HORA) = tiempo_anio 
+										AND MONTH(@FECHA_HORA) = tiempo_mes
+	RETURN @cod_tiempo
+END;
+GO
 
 
 
@@ -372,113 +385,134 @@ GO
 
 ---------------- MIGRACIONES A HECHOS ----------------
 CREATE PROCEDURE LOS_CRUD.MIGRAR_BI_TICKETS
- AS
-  BEGIN
-    INSERT INTO LOS_CRUD.BI_Tickets (cod_rango_etario_cliente, 
-	                                cod_rango_etario_empleado, 
-                                    cod_dia_ticket,
-                                    cod_tiempo,
-									cod_ubicacion,
-									cod_rango_turnos,
-									cod_tipo_caja,
-									cantidad_articulos,
-                                    total_ticket,
-									descuento_aplicado_ticket)
-		SELECT DISTINCT LOS_CRUD.BI_CALCULAR_RANGO_ETARIO(c.fecha_nacimiento_cliente) AS Cod_rango_etario_cliente,
-			LOS_CRUD.BI_CALCULAR_RANGO_ETARIO(e.fecha_nacimiento_empleado) AS Cod_rango_etario_empleado,
-			bd.cod_dia,
-			bt.cod_tiempo,
-			bu.cod_ubicacion,
-			LOS_CRUD.BI_CALCULAR_RANGO_TURNOS(t.fecha_hora_ticket) AS Cod_rango_turno,
-			bc.cod_tipo_caja,
-			SUM(td.cantidad) AS Cantidad_articulos,
-			t.total_ticket,
-			t.total_descuento_aplicado + t.total_descuento_aplicado_mp AS Descuento_aplicado
-		FROM LOS_CRUD.Ticket t
-		JOIN LOS_CRUD.Cliente c ON t.cod_cliente = c.cod_cliente
-		JOIN LOS_CRUD.Empleado e ON t.cod_empleado = e.legajo_empleado
-		JOIN LOS_CRUD.BI_TIEMPO bt ON YEAR(t.fecha_hora_ticket) = bt.tiempo_anio AND MONTH(t.fecha_hora_ticket) = bt.tiempo_mes
-		JOIN LOS_CRUD.BI_DIAS bd ON LOS_CRUD.BI_CALCULAR_DIA_SEMANA(t.fecha_hora_ticket) = bd.desc_dia
-		JOIN LOS_CRUD.Sucursal s ON e.cod_sucursal = s.cod_sucursal
-		JOIN LOS_CRUD.BI_UBICACION bu ON LOS_CRUD.BI_CALCULAR_UBICACION(s.cod_localidad) = bu.desc_ubicacion
-		JOIN LOS_CRUD.TicketDetalle td ON td.cod_ticket = t.cod_ticket
-		JOIN LOS_CRUD.Caja caja ON t.cod_caja = caja.cod_caja
-		JOIN LOS_CRUD.BI_TIPO_CAJA bc ON caja.cod_tipo_caja = bc.cod_tipo_caja 
-		GROUP BY 
-			c.fecha_nacimiento_cliente,
-			e.fecha_nacimiento_empleado,
-			bd.cod_dia,
-			bt.cod_tiempo,
-			bu.cod_ubicacion,
-			t.fecha_hora_ticket,
-			t.total_ticket,
-			bc.cod_tipo_caja,
-			t.total_descuento_aplicado + t.total_descuento_aplicado_mp
-	END
-GO
-
-CREATE PROCEDURE LOS_CRUD.MIGRAR_BI_PROMOCION_APLICADA
- AS
-  BEGIN
-    INSERT INTO LOS_CRUD.BI_PromocionAplicada (cod_categoria, descuento_aplicado, cod_tiempo)
-	SELECT DISTINCT 
-		sc.cod_categoria,
-		p.descuento_aplicado,
-		t.cod_tiempo
-	FROM LOS_CRUD.PromocionAplicada p
-	JOIN LOS_CRUD.Producto prod ON prod.cod_producto = p.cod_producto
-	JOIN LOS_CRUD.BI_SUBCATEGORIA_PRODUCTO sc ON sc.cod_subcategoria = prod.cod_subcategoria
-	JOIN LOS_CRUD.Ticket bt ON bt.cod_ticket = p.cod_ticket
-	JOIN LOS_CRUD.BI_TIEMPO t ON YEAR(bt.fecha_hora_ticket) = t.tiempo_anio AND MONTH(bt.fecha_hora_ticket) = t.tiempo_mes
-	END
-GO
-
-CREATE PROCEDURE LOS_CRUD.MIGRAR_BI_ENVIOS
- AS
-  BEGIN
-    INSERT INTO LOS_CRUD.BI_Envios (cod_sucursal, cod_ubicacion,
-									cod_rango_etario_cliente, anio_fecha_programada_envio,
-									mes_fecha_programada_envio, anio_fecha_entrega_envio,
-									mes_fecha_entrega_envio, costo_envio)
-	SELECT 
-		s.cod_sucursal,
-		u.cod_ubicacion,
-		LOS_CRUD.BI_CALCULAR_RANGO_ETARIO(cli.fecha_nacimiento_cliente) as cod_rango_etario_cliente,
-		YEAR(e.fecha_programada_envio),
-		MONTH(e.fecha_programada_envio),
-		YEAR(e.fecha_entrega_envio),
-		MONTH(e.fecha_entrega_envio),
-		e.costo_envio
-	FROM LOS_CRUD.Envio e
-	JOIN LOS_CRUD.Ticket t ON e.cod_ticket = t.cod_ticket
-	JOIN LOS_CRUD.Caja c ON t.cod_caja = c.cod_caja
-	JOIN LOS_CRUD.BI_SUCURSAL s ON s.cod_sucursal = c.cod_sucursal 
-	JOIN LOS_CRUD.Cliente cli ON t.cod_cliente = cli.cod_cliente
-	JOIN LOS_CRUD.BI_UBICACION u ON LOS_CRUD.BI_CALCULAR_UBICACION(cli.cod_localidad) = u.desc_ubicacion
-	END
+AS
+BEGIN
+    INSERT INTO LOS_CRUD.BI_Tickets (
+        cod_rango_etario_cliente, 
+        cod_rango_etario_empleado, 
+        cod_dia_ticket,
+        cod_tiempo,
+        cod_ubicacion,
+        cod_rango_turnos,
+        cod_tipo_caja,
+        cantidad_articulos,
+        total_ticket,
+        descuento_aplicado_ticket
+    )
+    SELECT 
+        LOS_CRUD.BI_CALCULAR_RANGO_ETARIO(c.fecha_nacimiento_cliente) AS cod_rango_etario_cliente,
+        LOS_CRUD.BI_CALCULAR_RANGO_ETARIO(e.fecha_nacimiento_empleado) AS cod_rango_etario_empleado,
+        bd.cod_dia,
+        bt.cod_tiempo,
+        bu.cod_ubicacion,
+        LOS_CRUD.BI_CALCULAR_RANGO_TURNOS(t.fecha_hora_ticket) AS cod_rango_turnos,
+        bc.cod_tipo_caja,
+        SUM(td.cantidad) AS cantidad_articulos,
+        t.total_ticket,
+        t.total_descuento_aplicado + t.total_descuento_aplicado_mp AS descuento_aplicado_ticket
+    FROM LOS_CRUD.Ticket t
+    JOIN LOS_CRUD.Cliente c ON t.cod_cliente = c.cod_cliente
+    JOIN LOS_CRUD.Empleado e ON t.cod_empleado = e.legajo_empleado
+    JOIN LOS_CRUD.BI_TIEMPO bt ON YEAR(t.fecha_hora_ticket) = bt.tiempo_anio AND MONTH(t.fecha_hora_ticket) = bt.tiempo_mes
+    JOIN LOS_CRUD.BI_DIAS bd ON LOS_CRUD.BI_CALCULAR_DIA_SEMANA(t.fecha_hora_ticket) = bd.desc_dia
+    JOIN LOS_CRUD.Sucursal s ON e.cod_sucursal = s.cod_sucursal
+    JOIN LOS_CRUD.BI_UBICACION bu ON LOS_CRUD.BI_CALCULAR_UBICACION(s.cod_localidad) = bu.desc_ubicacion
+    JOIN LOS_CRUD.TicketDetalle td ON td.cod_ticket = t.cod_ticket
+    JOIN LOS_CRUD.Caja caja ON t.cod_caja = caja.cod_caja
+    JOIN LOS_CRUD.BI_TIPO_CAJA bc ON caja.cod_tipo_caja = bc.cod_tipo_caja 
+    GROUP BY 
+        t.cod_ticket,
+        LOS_CRUD.BI_CALCULAR_RANGO_ETARIO(c.fecha_nacimiento_cliente),
+        LOS_CRUD.BI_CALCULAR_RANGO_ETARIO(e.fecha_nacimiento_empleado),
+        bd.cod_dia,
+        bt.cod_tiempo,
+        bu.cod_ubicacion,
+        LOS_CRUD.BI_CALCULAR_RANGO_TURNOS(t.fecha_hora_ticket),
+        bc.cod_tipo_caja,
+        t.total_ticket,
+        t.total_descuento_aplicado + t.total_descuento_aplicado_mp
+END
 GO
 
 CREATE PROCEDURE LOS_CRUD.MIGRAR_BI_PAGOS
- AS
-  BEGIN
-    INSERT INTO LOS_CRUD.BI_Pagos (cod_sucursal, cod_tiempo, cod_rango_etario_cliente, importe_pago, cuotas_tarjeta, cod_mdp, monto_descontado)
-	SELECT 
-		s.cod_sucursal,
-		bt.cod_tiempo,
-		LOS_CRUD.BI_CALCULAR_RANGO_ETARIO(cli.fecha_nacimiento_cliente) as cod_rango_etario_cliente,
-		p.importe_pago,
-		p.cuotas_tarjeta,
-		mp.cod_mdp,
-		p.monto_descontado
-	FROM LOS_CRUD.Pago p
-	JOIN LOS_CRUD.Ticket t ON p.cod_ticket = t.cod_ticket
-	JOIN LOS_CRUD.Caja c ON t.cod_caja = c.cod_caja
-	JOIN LOS_CRUD.BI_SUCURSAL s ON s.cod_sucursal = c.cod_sucursal 
-	JOIN LOS_CRUD.BI_TIEMPO bt ON YEAR(p.fecha_pago) = bt.tiempo_anio AND MONTH(p.fecha_pago) = bt.tiempo_mes
-	JOIN LOS_CRUD.BI_MDP mp ON mp.cod_mdp = p.cod_medio_pago
-	JOIN LOS_CRUD.Cliente cli ON t.cod_cliente = cli.cod_cliente
-	END
+AS
+BEGIN
+    INSERT INTO LOS_CRUD.BI_Pagos (cod_sucursal, cod_tiempo, cod_rango_etario_cliente, total_importe_pago, total_monto_descontado, total_cuotas, cod_mdp)
+    SELECT 
+        s.cod_sucursal,
+        tt.cod_tiempo,
+        LOS_CRUD.BI_CALCULAR_RANGO_ETARIO(cli.fecha_nacimiento_cliente) as cod_rango_etario_cliente,
+        SUM(p.importe_pago) AS total_importe_pago,
+        SUM(p.monto_descontado) AS total_monto_descontado,
+        SUM(p.cuotas_tarjeta) AS total_cuotas,
+        mp.cod_mdp
+    FROM LOS_CRUD.Pago p
+    JOIN LOS_CRUD.Ticket t ON p.cod_ticket = t.cod_ticket
+    JOIN LOS_CRUD.Caja c ON t.cod_caja = c.cod_caja
+    JOIN LOS_CRUD.BI_SUCURSAL s ON s.cod_sucursal = c.cod_sucursal 
+    JOIN LOS_CRUD.BI_TIEMPO tt ON YEAR(p.fecha_pago) = tt.tiempo_anio AND MONTH(p.fecha_pago) = tt.tiempo_mes
+    JOIN LOS_CRUD.BI_MDP mp ON mp.cod_mdp = p.cod_medio_pago
+    JOIN LOS_CRUD.Cliente cli ON t.cod_cliente = cli.cod_cliente
+    GROUP BY s.cod_sucursal, tt.cod_tiempo, LOS_CRUD.BI_CALCULAR_RANGO_ETARIO(cli.fecha_nacimiento_cliente), mp.cod_mdp
+END
 GO
+
+
+CREATE PROCEDURE LOS_CRUD.MIGRAR_BI_ENVIOS
+AS
+BEGIN
+    INSERT INTO LOS_CRUD.BI_Envios (
+        cod_sucursal, 
+        cod_ubicacion,
+        cod_rango_etario_cliente, 
+		cod_tiempo_programado,
+		cod_tiempo_entrega,
+        total_envios,
+        costo_total_envios
+    )
+    SELECT 
+        s.cod_sucursal,
+        u.cod_ubicacion,
+        LOS_CRUD.BI_CALCULAR_RANGO_ETARIO(cli.fecha_nacimiento_cliente) AS cod_rango_etario_cliente,
+		LOS_CRUD.BI_CALCULAR_TIEMPO(e.fecha_programada_envio) AS cod_tiempo_programado,
+		LOS_CRUD.BI_CALCULAR_TIEMPO(e.fecha_entrega_envio) AS cod_tiempo_entrega, 
+        COUNT(e.cod_envio) AS total_envios,
+        SUM(e.costo_envio) AS costo_total_envios
+    FROM 
+        LOS_CRUD.Envio e
+        JOIN LOS_CRUD.Ticket t ON e.cod_ticket = t.cod_ticket
+        JOIN LOS_CRUD.Caja c ON t.cod_caja = c.cod_caja
+        JOIN LOS_CRUD.BI_SUCURSAL s ON s.cod_sucursal = c.cod_sucursal
+        JOIN LOS_CRUD.Cliente cli ON t.cod_cliente = cli.cod_cliente
+        JOIN LOS_CRUD.BI_UBICACION u ON LOS_CRUD.BI_CALCULAR_UBICACION(cli.cod_localidad) = u.desc_ubicacion
+    GROUP BY 
+        s.cod_sucursal,
+        u.cod_ubicacion,
+        LOS_CRUD.BI_CALCULAR_RANGO_ETARIO(cli.fecha_nacimiento_cliente),
+		LOS_CRUD.BI_CALCULAR_TIEMPO(e.fecha_programada_envio),
+		LOS_CRUD.BI_CALCULAR_TIEMPO(e.fecha_entrega_envio)
+END
+GO
+
+
+CREATE PROCEDURE LOS_CRUD.MIGRAR_BI_PROMOCION_APLICADA
+AS
+BEGIN
+    INSERT INTO LOS_CRUD.BI_PromocionAplicada (cod_categoria, cod_tiempo, total_descuento_aplicado)
+    SELECT 
+        sc.cod_categoria,
+        t.cod_tiempo,
+        SUM(p.descuento_aplicado) AS total_descuento_aplicado
+    FROM LOS_CRUD.PromocionAplicada p
+    JOIN LOS_CRUD.Producto prod ON prod.cod_producto = p.cod_producto
+    JOIN LOS_CRUD.BI_SUBCATEGORIA_PRODUCTO sc ON sc.cod_subcategoria = prod.cod_subcategoria
+    JOIN LOS_CRUD.TicketDetalle td ON td.cod_ticket_detalle = p.cod_ticket_detalle
+    JOIN LOS_CRUD.Ticket bt ON bt.cod_ticket = td.cod_ticket
+    JOIN LOS_CRUD.BI_TIEMPO t ON YEAR(bt.fecha_hora_ticket) = t.tiempo_anio AND MONTH(bt.fecha_hora_ticket) = t.tiempo_mes
+    GROUP BY sc.cod_categoria, t.cod_tiempo
+END
+GO
+
 ---------------- TABLAS DIMENSIONALES ----------------
 
 CREATE TABLE LOS_CRUD.BI_TIEMPO(
@@ -549,51 +583,44 @@ CREATE TABLE LOS_CRUD.BI_TIPO_CAJA(
 
 
 CREATE TABLE LOS_CRUD.BI_Tickets (
-    
-    cod_rango_etario_cliente INT, 
-	cod_rango_etario_empleado INT FOREIGN KEY REFERENCES LOS_CRUD.BI_RANGO_ETARIO, 
-    cod_dia_ticket INT FOREIGN KEY REFERENCES LOS_CRUD.BI_DIAS,
-    cod_tiempo INT FOREIGN KEY REFERENCES LOS_CRUD.BI_TIEMPO,
-	cod_ubicacion INT FOREIGN KEY REFERENCES LOS_CRUD.BI_UBICACION,
-	cod_rango_turnos INT FOREIGN KEY REFERENCES LOS_CRUD.BI_RANGO_TURNOS,
-	cod_tipo_caja INT FOREIGN KEY REFERENCES LOS_CRUD.BI_TIPO_CAJA,
-	cantidad_articulos DECIMAL(10,2),
-    total_ticket DECIMAL(10,2) NOT NULL,
-	descuento_aplicado_ticket DECIMAL(10,2) NOT NULL
-    FOREIGN KEY (cod_rango_etario_cliente) REFERENCES LOS_CRUD.BI_RANGO_ETARIO,
-    FOREIGN KEY (cod_rango_etario_empleado) REFERENCES LOS_CRUD.BI_RANGO_ETARIO,
-    FOREIGN KEY (cod_dia_ticket) REFERENCES LOS_CRUD.BI_DIAS,
-    FOREIGN KEY (cod_tiempo) REFERENCES LOS_CRUD.BI_TIEMPO,
-	FOREIGN KEY (cod_rango_turnos) REFERENCES LOS_CRUD.BI_RANGO_TURNOS,
-	FOREIGN KEY (cod_tipo_caja) REFERENCES LOS_CRUD.BI_TIPO_CAJA
+    cod_rango_etario_cliente INT FOREIGN KEY REFERENCES LOS_CRUD.BI_RANGO_ETARIO(cod_rango_etario),
+    cod_rango_etario_empleado INT FOREIGN KEY REFERENCES LOS_CRUD.BI_RANGO_ETARIO(cod_rango_etario),
+    cod_dia_ticket INT FOREIGN KEY REFERENCES LOS_CRUD.BI_DIAS(cod_dia),
+    cod_tiempo INT FOREIGN KEY REFERENCES LOS_CRUD.BI_TIEMPO(cod_tiempo),
+    cod_ubicacion INT FOREIGN KEY REFERENCES LOS_CRUD.BI_UBICACION(cod_ubicacion),
+    cod_rango_turnos INT FOREIGN KEY REFERENCES LOS_CRUD.BI_RANGO_TURNOS(cod_rango_turnos),
+    cod_tipo_caja INT FOREIGN KEY REFERENCES LOS_CRUD.BI_TIPO_CAJA(cod_tipo_caja),
+    cantidad_articulos DECIMAL(10, 2),
+    total_ticket DECIMAL(10, 2) NOT NULL,
+    descuento_aplicado_ticket DECIMAL(10, 2) NOT NULL
 );
 
+
 CREATE TABLE LOS_CRUD.BI_PromocionAplicada (
-	cod_categoria INT FOREIGN KEY REFERENCES LOS_CRUD.BI_CATEGORIA_PRODUCTO,
-	descuento_aplicado DECIMAL(10,2),
-	cod_tiempo INT FOREIGN KEY REFERENCES LOS_CRUD.BI_TIEMPO
+    cod_categoria INT FOREIGN KEY REFERENCES LOS_CRUD.BI_CATEGORIA_PRODUCTO,
+    cod_tiempo INT FOREIGN KEY REFERENCES LOS_CRUD.BI_TIEMPO,
+    total_descuento_aplicado DECIMAL(18,2)
 );
 
 CREATE TABLE LOS_CRUD.BI_Envios(
-	cod_sucursal INT FOREIGN KEY REFERENCES LOS_CRUD.BI_SUCURSAL,
-	cod_ubicacion INT FOREIGN KEY REFERENCES LOS_CRUD.BI_UBICACION,
-	cod_rango_etario_cliente INT FOREIGN KEY REFERENCES LOS_CRUD.BI_RANGO_ETARIO,
-	anio_fecha_programada_envio INT,
-	mes_fecha_programada_envio INT,
-	anio_fecha_entrega_envio INT,
-	mes_fecha_entrega_envio INT,
-	costo_envio DECIMAL(18,2)
+    cod_sucursal INT FOREIGN KEY REFERENCES LOS_CRUD.BI_SUCURSAL,
+    cod_ubicacion INT FOREIGN KEY REFERENCES LOS_CRUD.BI_UBICACION,
+    cod_rango_etario_cliente INT FOREIGN KEY REFERENCES LOS_CRUD.BI_RANGO_ETARIO,
+    cod_tiempo_programado INT FOREIGN KEY REFERENCES LOS_CRUD.BI_TIEMPO,
+    cod_tiempo_entrega INT FOREIGN KEY REFERENCES LOS_CRUD.BI_TIEMPO,
+    total_envios INT,
+    costo_total_envios DECIMAL(18, 2)
 );
 
 CREATE TABLE LOS_CRUD.BI_Pagos(
-	cod_sucursal INT FOREIGN KEY REFERENCES LOS_CRUD.BI_SUCURSAL,
-	cod_tiempo INT FOREIGN KEY REFERENCES LOS_CRUD.BI_TIEMPO,
-	cod_rango_etario_cliente INT FOREIGN KEY REFERENCES LOS_CRUD.BI_RANGO_ETARIO,
-	importe_pago DECIMAL(10,2),
-	cuotas_tarjeta INT,
-	cod_mdp INT FOREIGN KEY REFERENCES LOS_CRUD.BI_MDP,
-	monto_descontado DECIMAL(10,2)
-)
+    cod_sucursal INT FOREIGN KEY REFERENCES LOS_CRUD.BI_SUCURSAL,
+    cod_tiempo INT FOREIGN KEY REFERENCES LOS_CRUD.BI_TIEMPO,
+    cod_rango_etario_cliente INT FOREIGN KEY REFERENCES LOS_CRUD.BI_RANGO_ETARIO,
+    total_importe_pago DECIMAL(18,2),
+    total_monto_descontado DECIMAL(18,2),
+    total_cuotas INT,
+    cod_mdp INT FOREIGN KEY REFERENCES LOS_CRUD.BI_MDP
+);
 
 ---------------- EXECUTES ----------------
 
@@ -633,33 +660,29 @@ GO
 
 -- 1. Ticket promedio mensual
 CREATE VIEW LOS_CRUD.BI_TicketPromedioMensual AS
-	SELECT 
-		u.desc_ubicacion AS Ubicacion,
-		t.tiempo_anio AS Anio,
-		t.tiempo_mes AS Mes,
-		AVG(total_ticket) AS TicketPromedioMensual
-	FROM LOS_CRUD.BI_Tickets bt
-		JOIN LOS_CRUD.BI_TIEMPO t ON bt.cod_tiempo = t.cod_tiempo
-		JOIN LOS_CRUD.BI_UBICACION u ON bt.cod_ubicacion = u.cod_ubicacion
-	GROUP BY 
-		u.desc_ubicacion, 
-		t.tiempo_anio, 
-		t.tiempo_mes;
+SELECT 
+    u.desc_ubicacion,
+    t.tiempo_anio,
+    t.tiempo_mes,
+    AVG(bt.total_ticket) AS ticket_promedio_mensual
+FROM LOS_CRUD.BI_Tickets bt
+JOIN LOS_CRUD.BI_UBICACION u ON bt.cod_ubicacion = u.cod_ubicacion
+JOIN LOS_CRUD.BI_TIEMPO t ON bt.cod_tiempo = t.cod_tiempo
+GROUP BY u.desc_ubicacion, t.tiempo_anio, t.tiempo_mes;
 GO
 
 --2 Cantidad de unidades promedio
 CREATE VIEW LOS_CRUD.BI_UnidadesPromedioPorTurnoYCuatrimestre AS
-	SELECT DISTINCT
-		t.tiempo_cuatrimestre AS Cuatrimestre,
-		brt.desc_rango_turnos AS Turno,
-		AVG(bt.cantidad_articulos) AS Promedio_unidades
-	FROM LOS_CRUD.BI_Tickets bt
-		JOIN LOS_CRUD.BI_TIEMPO t ON bt.cod_tiempo = t.cod_tiempo
-		JOIN LOS_CRUD.BI_RANGO_TURNOS brt ON bt.cod_rango_turnos = brt.cod_rango_turnos
-	GROUP BY
-		t.tiempo_cuatrimestre,
-		brt.desc_rango_turnos;
-GO		
+SELECT 
+    rt.desc_rango_turnos,
+    t.tiempo_anio,
+    t.tiempo_cuatrimestre,
+    AVG(bt.cantidad_articulos) AS cantidad_unidades_promedio
+FROM LOS_CRUD.BI_Tickets bt
+JOIN LOS_CRUD.BI_RANGO_TURNOS rt ON bt.cod_rango_turnos = rt.cod_rango_turnos
+JOIN LOS_CRUD.BI_TIEMPO t ON bt.cod_tiempo = t.cod_tiempo
+GROUP BY rt.desc_rango_turnos, t.tiempo_anio, t.tiempo_cuatrimestre;
+GO	
 
 --3 Porcentaje anual de ventas
 CREATE VIEW LOS_CRUD.BI_PorcentajeAnualDeVentas AS
@@ -683,158 +706,189 @@ GO
 --4 Cantidad de ventas registradas por turno
 		
 CREATE VIEW LOS_CRUD.BI_VentasPorTurno AS
-	SELECT
-		u.desc_ubicacion AS Localidad,
-		t.tiempo_anio AS Anio,
-		t.tiempo_mes AS Mes,
-		brt.desc_rango_turnos AS Turno,
-		COUNT(total_ticket) AS Cantidad_ventas
-	FROM LOS_CRUD.BI_Tickets bt
-		JOIN LOS_CRUD.BI_TIEMPO t ON t.cod_tiempo = bt.cod_tiempo
-		JOIN LOS_CRUD.BI_UBICACION u ON u.cod_ubicacion = bt.cod_ubicacion
-		JOIN LOS_CRUD.BI_RANGO_TURNOS brt ON brt.cod_rango_turnos = bt.cod_rango_turnos
-	GROUP BY
-		brt.desc_rango_turnos, u.desc_ubicacion, t.tiempo_anio, t.tiempo_mes
+	SELECT 
+    u.desc_ubicacion,
+    rt.desc_rango_turnos,
+    t.tiempo_anio,
+    t.tiempo_mes,
+    COUNT(*) AS cantidad_ventas
+FROM LOS_CRUD.BI_Tickets bt
+JOIN LOS_CRUD.BI_UBICACION u ON bt.cod_ubicacion = u.cod_ubicacion
+JOIN LOS_CRUD.BI_RANGO_TURNOS rt ON bt.cod_rango_turnos = rt.cod_rango_turnos
+JOIN LOS_CRUD.BI_TIEMPO t ON bt.cod_tiempo = t.cod_tiempo
+GROUP BY u.desc_ubicacion, rt.desc_rango_turnos, t.tiempo_anio, t.tiempo_mes;
 GO
-
 --5 Porcentaje de descuento aplicados en función del total de los tickets
 
 CREATE VIEW LOS_CRUD.BI_PorcentajeDescuentoTicket AS
 	SELECT 
-		t.tiempo_anio AS Anio,
-		t.tiempo_mes AS Mes,
-		(SUM(bt.descuento_aplicado_ticket) / SUM(bt.total_ticket)) * 100 AS Porcentaje_descuento
-	FROM LOS_CRUD.BI_Tickets bt
-		JOIN LOS_CRUD.BI_TIEMPO t ON t.cod_tiempo = bt.cod_tiempo
-	GROUP BY
-		t.tiempo_anio, t.tiempo_mes
+    t.tiempo_anio,
+    t.tiempo_mes,
+    SUM(bt.descuento_aplicado_ticket) * 100.0 / SUM(bt.total_ticket) AS porcentaje_descuento
+FROM LOS_CRUD.BI_Tickets bt
+JOIN LOS_CRUD.BI_TIEMPO t ON bt.cod_tiempo = t.cod_tiempo
+GROUP BY t.tiempo_anio, t.tiempo_mes;
 GO
 
 -- 6
 CREATE VIEW LOS_CRUD.BI_CategoriasMayorDescuento AS
-WITH CTE_CategoriasDescuento AS (
-	SELECT 
-		cat.desc_categoria,
-		prom.descuento_aplicado,
-		t.tiempo_anio,
-		t.tiempo_cuatrimestre,
-		ROW_NUMBER() OVER (PARTITION BY t.tiempo_anio, t.tiempo_cuatrimestre ORDER BY prom.descuento_aplicado DESC) AS rn
-	FROM LOS_CRUD.BI_PromocionAplicada prom
-		JOIN LOS_CRUD.BI_CATEGORIA_PRODUCTO cat ON cat.cod_categoria = prom.cod_categoria
-		JOIN LOS_CRUD.BI_TIEMPO t ON t.cod_tiempo = prom.cod_tiempo
+WITH CategoriaDescuento AS (
+    SELECT 
+        sc.cod_categoria,
+        t.tiempo_anio,
+        t.tiempo_cuatrimestre,
+        SUM(pa.total_descuento_aplicado) AS total_descuento
+    FROM LOS_CRUD.BI_PromocionAplicada pa
+    JOIN LOS_CRUD.BI_TIEMPO t ON pa.cod_tiempo = t.cod_tiempo
+    JOIN LOS_CRUD.BI_CATEGORIA_PRODUCTO sc ON pa.cod_categoria = sc.cod_categoria
+    GROUP BY sc.cod_categoria, t.tiempo_anio, t.tiempo_cuatrimestre
 )
-SELECT
-	desc_categoria,
-	descuento_aplicado,
-	tiempo_anio,
-	tiempo_cuatrimestre
-FROM CTE_CategoriasDescuento
+SELECT 
+    cod_categoria,
+    tiempo_anio,
+    tiempo_cuatrimestre,
+    total_descuento
+FROM (
+    SELECT 
+        cod_categoria,
+        tiempo_anio,
+        tiempo_cuatrimestre,
+        total_descuento,
+        ROW_NUMBER() OVER (PARTITION BY tiempo_anio, tiempo_cuatrimestre ORDER BY total_descuento DESC) AS rn
+    FROM CategoriaDescuento
+) AS sub
 WHERE rn <= 3;
 GO
-
 --7 
 CREATE VIEW LOS_CRUD.BI_PorcentajeCumplimientoEnvios AS
 	SELECT 
-	s.nombre_sucursal,
-	COUNT(*)/COUNT(mes_fecha_entrega_envio)*100 AS porcentaje_envios_cumplidos,
-	e.anio_fecha_programada_envio AS anio,
-	e.mes_fecha_programada_envio AS mes
-	FROM LOS_CRUD.BI_Envios e
-	JOIN LOS_CRUD.BI_SUCURSAL s ON e.cod_sucursal = s.cod_sucursal
-	WHERE e.mes_fecha_entrega_envio <= e.mes_fecha_programada_envio AND e.anio_fecha_entrega_envio <= e.anio_fecha_programada_envio
-	GROUP BY s.nombre_sucursal, e.anio_fecha_programada_envio, e.mes_fecha_programada_envio
+    s.nombre_sucursal,
+    t.tiempo_anio,
+    t.tiempo_mes,
+    SUM(CASE WHEN e.cod_tiempo_entrega <= e.cod_tiempo_programado THEN 1 ELSE 0 END) * 100.0 / COUNT(e.cod_tiempo_entrega) AS porcentaje_cumplimiento
+FROM LOS_CRUD.BI_Envios e
+JOIN LOS_CRUD.BI_SUCURSAL s ON e.cod_sucursal = s.cod_sucursal
+JOIN LOS_CRUD.BI_TIEMPO t ON e.cod_tiempo_programado = t.cod_tiempo
+GROUP BY s.nombre_sucursal, t.tiempo_anio, t.tiempo_mes;
 GO
 
 --8
 CREATE VIEW LOS_CRUD.BI_CantidadDeEnviosRangoEtarioCliente AS
-	SELECT 
-	re.desc_rango_etario as rango_etario_cliente,
-	t.tiempo_anio as anio,
-	t.tiempo_cuatrimestre as cuatrimestre,
-	COUNT(*) AS Cantidad_envios
-	FROM LOS_CRUD.BI_Envios e
-	JOIN LOS_CRUD.BI_RANGO_ETARIO re ON e.cod_rango_etario_cliente = re.cod_rango_etario
-	JOIN LOS_CRUD.BI_TIEMPO t ON e.anio_fecha_programada_envio = t.tiempo_anio AND e.mes_fecha_programada_envio = t.tiempo_mes 
-	GROUP BY re.desc_rango_etario, t.tiempo_anio, t.tiempo_cuatrimestre
+SELECT 
+    re.desc_rango_etario,
+    t.tiempo_anio,
+    t.tiempo_cuatrimestre,
+    COUNT(e.cod_tiempo_programado) AS cantidad_envios
+FROM LOS_CRUD.BI_Envios e
+JOIN LOS_CRUD.BI_RANGO_ETARIO re ON e.cod_rango_etario_cliente = re.cod_rango_etario
+JOIN LOS_CRUD.BI_TIEMPO t ON e.cod_tiempo_programado = t.cod_tiempo
+GROUP BY re.desc_rango_etario, t.tiempo_anio, t.tiempo_cuatrimestre;
 GO
 
 --9
 CREATE VIEW LOS_CRUD.BI_LocalidadesConMayorCosto AS
-	SELECT 
-	u.desc_ubicacion AS localidad,
-	e.costo_envio
-	FROM LOS_CRUD.BI_Envios e
-	JOIN LOS_CRUD.BI_UBICACION u ON e.cod_ubicacion = u.cod_ubicacion
+WITH LocalidadCosto AS (
+    SELECT 
+        u.desc_ubicacion,
+        SUM(e.costo_total_envios) AS total_costo_envios,
+        ROW_NUMBER() OVER (ORDER BY SUM(e.costo_total_envios) DESC) AS rn
+    FROM LOS_CRUD.BI_Envios e
+    JOIN LOS_CRUD.BI_UBICACION u ON e.cod_ubicacion = u.cod_ubicacion
+    GROUP BY u.desc_ubicacion
+)
+SELECT 
+    desc_ubicacion,
+    total_costo_envios
+FROM LocalidadCosto
+WHERE rn <= 5;
 GO
 
 --10 
 CREATE VIEW LOS_CRUD.BI_SucursalesConMayorImporteDePagosEnCuotas AS
-	SELECT
-	s.nombre_sucursal,
-	mp.desc_mdp as  medio_pago,
-	t.tiempo_anio as anio,
-	t.tiempo_mes as mes,
-	SUM(p.importe_pago) as importe_de_pagos
-	FROM LOS_CRUD.BI_Pagos p
-	JOIN LOS_CRUD.BI_MDP mp ON mp.cod_mdp = p.cod_mdp
-	JOIN LOS_CRUD.BI_SUCURSAL s ON p.cod_sucursal = s.cod_sucursal
-	JOIN LOS_CRUD.BI_TIEMPO t ON p.cod_tiempo = t.cod_tiempo
-	WHERE p.cuotas_tarjeta IS NOT NULL
-	GROUP BY s.nombre_sucursal, mp.desc_mdp, t.tiempo_anio, t.tiempo_mes
+	WITH SucursalPagos AS (
+    SELECT 
+        s.nombre_sucursal,
+        mp.desc_mdp,
+        t.tiempo_anio,
+        t.tiempo_mes,
+        SUM(p.total_importe_pago) AS total_importe_pagos
+    FROM LOS_CRUD.BI_Pagos p
+    JOIN LOS_CRUD.BI_SUCURSAL s ON p.cod_sucursal = s.cod_sucursal
+    JOIN LOS_CRUD.BI_MDP mp ON p.cod_mdp = mp.cod_mdp
+    JOIN LOS_CRUD.BI_TIEMPO t ON p.cod_tiempo = t.cod_tiempo
+    GROUP BY s.nombre_sucursal, mp.desc_mdp, t.tiempo_anio, t.tiempo_mes
+)
+SELECT 
+    nombre_sucursal,
+    desc_mdp,
+    tiempo_anio,
+    tiempo_mes,
+    total_importe_pagos
+FROM (
+    SELECT 
+        nombre_sucursal,
+        desc_mdp,
+        tiempo_anio,
+        tiempo_mes,
+        total_importe_pagos,
+        ROW_NUMBER() OVER (PARTITION BY tiempo_anio, tiempo_mes, desc_mdp ORDER BY total_importe_pagos DESC) AS rn
+    FROM SucursalPagos
+) AS sub
+WHERE rn <= 3;
 GO
 
 --11
 CREATE VIEW LOS_CRUD.BI_PromedioImporteDeCuota AS
 	SELECT 
-	re.desc_rango_etario as rango_etario_cliente,
-	SUM(p.importe_pago/p.cuotas_tarjeta) / COUNT(*) as promedio_importe_de_cuota
-	FROM LOS_CRUD.BI_Pagos p
-	JOIN LOS_CRUD.BI_RANGO_ETARIO re ON p.cod_rango_etario_cliente = re.cod_rango_etario
-	WHERE p.cuotas_tarjeta IS NOT NULL
-	GROUP BY re.desc_rango_etario
+    re.desc_rango_etario,
+    AVG(p.total_importe_pago / p.total_cuotas) AS promedio_importe_cuota
+FROM LOS_CRUD.BI_Pagos p
+JOIN LOS_CRUD.BI_RANGO_ETARIO re ON p.cod_rango_etario_cliente = re.cod_rango_etario
+GROUP BY re.desc_rango_etario;
 GO
 
 --12
 CREATE VIEW LOS_CRUD.BI_PorcentajeDescuentoAplicadoPorMedioDePago AS
 	SELECT 
-	mp.desc_mdp as medio_de_pago,
-	t.tiempo_cuatrimestre as cuatrimestre,
-	SUM(p.monto_descontado) / SUM(p.monto_descontado + p.importe_pago) * 100 as porcentaje_descuento 
-	FROM LOS_CRUD.BI_Pagos p
-	JOIN LOS_CRUD.BI_MDP mp ON mp.cod_mdp = p.cod_mdp
-	JOIN LOS_CRUD.BI_TIEMPO t ON p.cod_tiempo = t.cod_tiempo
-	WHERE p.cuotas_tarjeta IS NOT NULL
-	GROUP BY mp.desc_mdp, t.tiempo_cuatrimestre
+    mp.desc_mdp,
+    t.tiempo_anio,
+    t.tiempo_cuatrimestre,
+    SUM(p.total_monto_descontado) * 100.0 / SUM(p.total_importe_pago + p.total_monto_descontado) AS porcentaje_descuento
+FROM LOS_CRUD.BI_Pagos p
+JOIN LOS_CRUD.BI_MDP mp ON p.cod_mdp = mp.cod_mdp
+JOIN LOS_CRUD.BI_TIEMPO t ON p.cod_tiempo = t.cod_tiempo
+GROUP BY mp.desc_mdp, t.tiempo_anio, t.tiempo_cuatrimestre;
 GO
 ---------------- SELECTS DE LAS VISTAS ----------------
 SELECT * from LOS_CRUD.BI_TicketPromedioMensual 	
-ORDER BY Anio, Mes;
+ORDER BY tiempo_anio, tiempo_mes;
 
 SELECT * from LOS_CRUD.BI_UnidadesPromedioPorTurnoYCuatrimestre
-ORDER BY cuatrimestre, turno;
+ORDER BY tiempo_cuatrimestre, desc_rango_turnos;
 
 SELECT * from LOS_CRUD.BI_PorcentajeAnualDeVentas
 ORDER BY Cuatrimestre, Edad, Tipo_caja, Anio, PorcentajeAnualDeVentas;
 
 SELECT * from LOS_CRUD.BI_VentasPorTurno
-ORDER BY Turno, Localidad, Anio, Mes;
+ORDER BY desc_rango_turnos, desc_ubicacion, tiempo_anio, tiempo_mes;
 
 SELECT * from LOS_CRUD.BI_PorcentajeDescuentoTicket
 
 SELECT * from LOS_CRUD.BI_CategoriasMayorDescuento
+order by cod_categoria ASC, tiempo_cuatrimestre ASC
 
 SELECT * FROM LOS_CRUD.BI_PorcentajeCumplimientoEnvios
 
 SELECT * FROM LOS_CRUD.BI_CantidadDeEnviosRangoEtarioCliente 
-ORDER BY rango_etario_cliente, cuatrimestre
+ORDER BY desc_rango_etario DESC, tiempo_cuatrimestre 	
 
-SELECT TOP 5 * FROM LOS_CRUD.BI_LocalidadesConMayorCosto 
-ORDER BY costo_envio DESC
+SELECT  * FROM LOS_CRUD.BI_LocalidadesConMayorCosto 
+ORDER BY total_costo_envios DESC
 
 SELECT TOP 3 * FROM LOS_CRUD.BI_SucursalesConMayorImporteDePagosEnCuotas
-ORDER BY importe_de_pagos DESC
+ORDER BY total_importe_pagos DESC
 
 SELECT * FROM LOS_CRUD.BI_PromedioImporteDeCuota	
 
 SELECT * FROM LOS_CRUD.BI_PorcentajeDescuentoAplicadoPorMedioDePago
-ORDER BY medio_de_pago, cuatrimestre
+ORDER BY desc_mdp, tiempo_cuatrimestre
